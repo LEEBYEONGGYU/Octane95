@@ -10,7 +10,7 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  final String initialUrl = "http://gyudrive.ipdisk.co.kr/Untitled-1.html";
+  final String initialUrl = "https://gyudrive.myasustor.com/Untitled-1.html";
 
   @override
   Widget build(BuildContext context) {
