@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>옥탄가 계산기</title>
+
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Apple SD Gothic Neo', sans-serif;
+      padding: 20px;
+      margin: 0;
+      max-width: 500px;
+      margin: auto;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      font-size: 24px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 8px;
+    }
+    input {
+      padding: 10px;
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .inline-inputs {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .inline-inputs input {
+      flex: 1;
+    }
+    @media (max-width: 480px) {
+      .inline-inputs {
+        flex-direction: column;
+      }
+    }
+    button {
+      background-color: #ff4d4d;
+      color: white;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      font-size: 18px;
+      width: 100%;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      background-color: #e63e3e;
+    }
+    .result {
+      margin-top: 20px;
+      font-size: 17px;
+      background: #fff;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    }
+
+    /* -------- 사이드 메뉴 -------- */
+    .hamburger {
+      font-size: 28px;
+      cursor: pointer;
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 1001;
+    }
+
+    .sidebar {
+      height: 100%;
+      width: 0;
+      position: fixed;
+      z-index: 1000;
+      top: 0;
+      left: 0;
+      background-color: #fff;
+      overflow-x: hidden;
+      transition: 0.3s;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+      padding-top: 60px;
+    }
+
+    .sidebar a {
+      padding: 14px 24px;
+      text-decoration: none;
+      font-size: 18px;
+      display: block;
+      color: #333;
+    }
+
+    .sidebar a:hover {
+      background-color: #f2f2f2;
+    }
+
+    .closebtn {
+      position: absolute;
+      top: 20px;
+      right: 25px;
+      font-size: 28px;
+      cursor: pointer;
+    }
+
+    /* 내용 영역에 메뉴 가리지 않도록 여백 */
+    .content {
+      padding-top: 60px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ☰ 햄버거 버튼 -->
+  <span class="hamburger" onclick="openNav()">☰</span>
+
+  <!-- ⬅️ 왼쪽 슬라이드 메뉴 -->
+  <div id="mySidebar" class="sidebar">
+    <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">×</a>
+    <a href="#">🏠 홈</a>
+    <a href="#">🧪 옥탄가 계산</a>
+    <a href="#">⛽ 주유 기록 (예정)</a>
+    <a href="#">⚙️ 설정</a>
+  </div>
+
+  <!-- 👇 본문 내용 -->
+  <div class="content">
+    <h1>옥탄가 계산기</h1>
+
+    <div class="section">
+      <label>내 차량 연료탱크 크기 (L)</label>
+      <input type="number" id="tankSize" placeholder="예: 50">
+    </div>
+
+    <div class="section">
+      <h3>⛽ 고급유</h3>
+      <div class="inline-inputs">
+        <input type="number" id="premiumPrice" placeholder="금액 (예: 30000)">
+        <input type="number" id="premiumPerLiter" placeholder="리터당 가격 (예: 1850)">
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>⛽ 일반유</h3>
+      <div class="inline-inputs">
+        <input type="number" id="regularPrice" placeholder="금액 (예: 30000)">
+        <input type="number" id="regularPerLiter" placeholder="리터당 가격 (예: 1630)">
+      </div>
+    </div>
+
+    <button onclick="calculate()">평균 옥탄가 계산</button>
+
+    <div class="result" id="result"></div>
+  </div>
+
+  <script>
+    function openNav() {
+      document.getElementById("mySidebar").style.width = "250px";
+    }
+
+    function closeNav() {
+      document.getElementById("mySidebar").style.width = "0";
+    }
+
+    function calculate() {
+      const premiumPrice = parseFloat(document.getElementById('premiumPrice').value) || 0;
+      const premiumPerLiter = parseFloat(document.getElementById('premiumPerLiter').value) || 1;
+      const regularPrice = parseFloat(document.getElementById('regularPrice').value) || 0;
+      const regularPerLiter = parseFloat(document.getElementById('regularPerLiter').value) || 1;
+      const tankSize = parseFloat(document.getElementById('tankSize').value) || 50;
+
+      const premiumLiter = premiumPrice / premiumPerLiter;
+      const regularLiter = regularPrice / regularPerLiter;
+      const totalLiter = premiumLiter + regularLiter;
+
+      const avgOctane = totalLiter === 0 ? 0 : (
+        (premiumLiter * 100 + regularLiter * 91) / totalLiter
+      );
+
+      const fillPercent = tankSize > 0 ? (totalLiter / tankSize * 100) : 0;
+
+      document.getElementById('result').innerHTML = `
+        ✅ 총 주유량: <b>${totalLiter.toFixed(2)}L</b><br>
+        ✅ 평균 옥탄가: <b>${avgOctane.toFixed(2)}</b><br>
+        ✅ 고급유 비율: <b>${(premiumLiter / totalLiter * 100).toFixed(1)}%</b><br>
+        ✅ 연료탱크의 <b>${fillPercent.toFixed(1)}%</b> 충전됨
+      `;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,263 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.octane.octane95"
+4    android:versionCode="4"
+5    android:versionName="1.0.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="21"
+8-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml
+9        android:targetSdkVersion="34" />
+9-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:3:5-66
+11-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:3:22-64
+12    <!--
+13         Required to query activities that can process text, see:
+14         https://developer.android.com/training/package-visibility and
+15         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+16
+17         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin.
+18    -->
+19    <queries>
+19-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:46:5-51:15
+20        <intent>
+20-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:47:9-50:18
+21            <action android:name="android.intent.action.PROCESS_TEXT" />
+21-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:48:13-72
+21-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:48:21-70
+22
+23            <data android:mimeType="text/plain" />
+23-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:49:13-50
+23-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:49:19-48
+24        </intent>
+25        <intent>
+25-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:10:9-12:18
+26            <action android:name="android.support.customtabs.action.CustomTabsService" />
+26-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:11:13-90
+26-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:11:21-87
+27        </intent>
+28    </queries>
+29
+30    <permission
+30-->[androidx.core:core:1.13.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\fac84cd5ecf1ec88a8c98571217c9350\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
+31        android:name="com.octane.octane95.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+31-->[androidx.core:core:1.13.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\fac84cd5ecf1ec88a8c98571217c9350\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
+32        android:protectionLevel="signature" />
+32-->[androidx.core:core:1.13.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\fac84cd5ecf1ec88a8c98571217c9350\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
+33
+34    <uses-permission android:name="com.octane.octane95.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+34-->[androidx.core:core:1.13.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\fac84cd5ecf1ec88a8c98571217c9350\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
+34-->[androidx.core:core:1.13.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\fac84cd5ecf1ec88a8c98571217c9350\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
+35
+36    <application
+37        android:name="android.app.Application"
+37-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:8:9-42
+38        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+38-->[androidx.core:core:1.13.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\fac84cd5ecf1ec88a8c98571217c9350\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
+39        android:icon="@mipmap/ic_launcher"
+39-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:10:9-43
+40        android:label="옥탄가 계산기"
+40-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:7:9-32
+41        android:usesCleartextTraffic="true" >
+41-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:9:9-44
+42        <activity
+42-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:11:9-33:20
+43            android:name="com.octane.octane95.MainActivity"
+43-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:12:13-41
+44            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+44-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:18:13-163
+45            android:exported="true"
+45-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:13:13-36
+46            android:hardwareAccelerated="true"
+46-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:19:13-47
+47            android:launchMode="singleTop"
+47-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:14:13-43
+48            android:taskAffinity=""
+48-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:15:13-36
+49            android:theme="@style/LaunchTheme"
+49-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:17:13-47
+50            android:windowSoftInputMode="adjustResize" >
+50-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:20:13-55
+51
+52            <!--
+53                 Specifies an Android theme to apply to this Activity as soon as
+54                 the Android process has started. This theme is visible to the user
+55                 while the Flutter UI initializes. After that, this theme continues
+56                 to determine the Window background behind the Flutter UI.
+57            -->
+58            <meta-data
+58-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:25:13-28:17
+59                android:name="io.flutter.embedding.android.NormalTheme"
+59-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:26:15-70
+60                android:resource="@style/NormalTheme" />
+60-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:27:15-52
+61
+62            <intent-filter>
+62-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:29:13-32:29
+63                <action android:name="android.intent.action.MAIN" />
+63-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:30:17-68
+63-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:30:25-66
+64
+65                <category android:name="android.intent.category.LAUNCHER" />
+65-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:31:17-76
+65-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:31:27-74
+66            </intent-filter>
+67        </activity>
+68        <!--
+69             Don't delete the meta-data below.
+70             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java
+71        -->
+72
+73        <meta-data
+73-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:37:9-39:33
+74            android:name="flutterEmbedding"
+74-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:38:13-44
+75            android:value="2" />
+75-->D:\github\Octane95\android\app\src\main\AndroidManifest.xml:39:13-30
+76
+77        <activity
+77-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:16:9-20:47
+78            android:name="com.pichillilorenzo.flutter_inappwebview_android.in_app_browser.InAppBrowserActivity"
+78-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:17:13-112
+79            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|fontScale|screenLayout|density"
+79-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:18:13-137
+80            android:exported="false"
+80-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:19:13-37
+81            android:theme="@style/AppTheme" />
+81-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:20:13-44
+82        <activity
+82-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:21:9-24:55
+83            android:name="com.pichillilorenzo.flutter_inappwebview_android.chrome_custom_tabs.ChromeCustomTabsActivity"
+83-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:22:13-120
+84            android:exported="false"
+84-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:23:13-37
+85            android:theme="@style/ThemeTransparent" />
+85-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:24:13-52
+86        <activity
+86-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:25:9-28:55
+87            android:name="com.pichillilorenzo.flutter_inappwebview_android.chrome_custom_tabs.TrustedWebActivity"
+87-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:26:13-114
+88            android:exported="false"
+88-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:27:13-37
+89            android:theme="@style/ThemeTransparent" />
+89-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:28:13-52
+90        <activity
+90-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:29:9-33:55
+91            android:name="com.pichillilorenzo.flutter_inappwebview_android.chrome_custom_tabs.ChromeCustomTabsActivitySingleInstance"
+91-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:30:13-134
+92            android:exported="false"
+92-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:31:13-37
+93            android:launchMode="singleInstance"
+93-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:32:13-48
+94            android:theme="@style/ThemeTransparent" />
+94-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:33:13-52
+95        <activity
+95-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:34:9-38:55
+96            android:name="com.pichillilorenzo.flutter_inappwebview_android.chrome_custom_tabs.TrustedWebActivitySingleInstance"
+96-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:35:13-128
+97            android:exported="false"
+97-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:36:13-37
+98            android:launchMode="singleInstance"
+98-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:37:13-48
+99            android:theme="@style/ThemeTransparent" />
+99-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:38:13-52
+100
+101        <receiver
+101-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:40:9-43:40
+102            android:name="com.pichillilorenzo.flutter_inappwebview_android.chrome_custom_tabs.ActionBroadcastReceiver"
+102-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:41:13-119
+103            android:enabled="true"
+103-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:42:13-35
+104            android:exported="false" />
+104-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:43:13-37
+105
+106        <meta-data
+106-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:45:9-47:36
+107            android:name="io.flutter.embedded_views_preview"
+107-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:46:13-61
+108            android:value="true" />
+108-->[:flutter_inappwebview_android] D:\github\Octane95\build\flutter_inappwebview_android\intermediates\merged_manifest\release\AndroidManifest.xml:47:13-33
+109
+110        <provider
+110-->[androidx.emoji2:emoji2:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\416b72c60f2871d1386ba3a79cb8bd10\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+111            android:name="androidx.startup.InitializationProvider"
+111-->[androidx.emoji2:emoji2:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\416b72c60f2871d1386ba3a79cb8bd10\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
+112            android:authorities="com.octane.octane95.androidx-startup"
+112-->[androidx.emoji2:emoji2:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\416b72c60f2871d1386ba3a79cb8bd10\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
+113            android:exported="false" >
+113-->[androidx.emoji2:emoji2:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\416b72c60f2871d1386ba3a79cb8bd10\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
+114            <meta-data
+114-->[androidx.emoji2:emoji2:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\416b72c60f2871d1386ba3a79cb8bd10\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+115                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+115-->[androidx.emoji2:emoji2:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\416b72c60f2871d1386ba3a79cb8bd10\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
+116                android:value="androidx.startup" />
+116-->[androidx.emoji2:emoji2:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\416b72c60f2871d1386ba3a79cb8bd10\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
+117            <meta-data
+117-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d674cd90e13def17f77b3f8010d35e09\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:29:13-31:52
+118                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+118-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d674cd90e13def17f77b3f8010d35e09\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:30:17-78
+119                android:value="androidx.startup" />
+119-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d674cd90e13def17f77b3f8010d35e09\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:31:17-49
+120            <meta-data
+120-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
+121                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+121-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
+122                android:value="androidx.startup" />
+122-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
+123        </provider>
+124
+125        <uses-library
+125-->[androidx.window:window:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d47b1192960df52846144d82ac9e1d6f\transformed\jetified-window-1.2.0\AndroidManifest.xml:23:9-25:40
+126            android:name="androidx.window.extensions"
+126-->[androidx.window:window:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d47b1192960df52846144d82ac9e1d6f\transformed\jetified-window-1.2.0\AndroidManifest.xml:24:13-54
+127            android:required="false" />
+127-->[androidx.window:window:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d47b1192960df52846144d82ac9e1d6f\transformed\jetified-window-1.2.0\AndroidManifest.xml:25:13-37
+128        <uses-library
+128-->[androidx.window:window:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d47b1192960df52846144d82ac9e1d6f\transformed\jetified-window-1.2.0\AndroidManifest.xml:26:9-28:40
+129            android:name="androidx.window.sidecar"
+129-->[androidx.window:window:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d47b1192960df52846144d82ac9e1d6f\transformed\jetified-window-1.2.0\AndroidManifest.xml:27:13-51
+130            android:required="false" />
+130-->[androidx.window:window:1.2.0] C:\Users\gyu_desktop\.gradle\caches\transforms-3\d47b1192960df52846144d82ac9e1d6f\transformed\jetified-window-1.2.0\AndroidManifest.xml:28:13-37
+131
+132        <receiver
+132-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
+133            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+133-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
+134            android:directBootAware="false"
+134-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
+135            android:enabled="true"
+135-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
+136            android:exported="true"
+136-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
+137            android:permission="android.permission.DUMP" >
+137-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
+138            <intent-filter>
+138-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
+139                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+139-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
+139-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
+140            </intent-filter>
+141            <intent-filter>
+141-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
+142                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+142-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
+142-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
+143            </intent-filter>
+144            <intent-filter>
+144-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
+145                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+145-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
+145-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+146            </intent-filter>
+147            <intent-filter>
+147-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
+148                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+148-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
+148-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\gyu_desktop\.gradle\caches\transforms-3\166e5df34c1c015ef6ddeae137513a3f\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
+149            </intent-filter>
+150        </receiver>
+151    </application>
+152
+153</manifest>

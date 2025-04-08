@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.octane.octane95.app-mergeReleaseResources-32:/values-ldltr-v21/values-ldltr-v21.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\gyu_desktop\\.gradle\\caches\\transforms-3\\a698a7b7e559b3cff50d7a558ddc2f4f\\transformed\\appcompat-1.6.1\\res\\values-ldltr-v21\\values-ldltr-v21.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "112",
+                        "endOffsets": "163"
+                    }
+                }
+            ]
+        }
+    ]
+}
