@@ -1,16 +1,48 @@
-# octane95
+# 옥탄가 계산기 (Octane Calculator)
 
-평균 옥탄가 계산기
+🚗 **혼합 주유 시 평균 옥탄가를 자동으로 계산해주는 앱**  
+고급유와 일반유를 혼합해 주유할 때, 평균 옥탄가를 쉽고 빠르게 확인하세요.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 📱 주요 기능
 
-A few resources to get you started if this is your first Flutter project:
+- 고급유/일반유 주유 금액과 단가 입력
+- 연료탱크 용량 입력
+- 자동으로 평균 옥탄가 계산
+- 고급유 비율, 총 주유량, 탱크 충전율 표시
+- 반응형 UI (모바일/웹 모두 지원)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🛠 기술 스택
+
+- Flutter 3.x
+- Dart
+- InAppWebView
+- HTML5 + JavaScript (내장 WebView UI)
+
+---
+
+## 🔒 개인정보 및 보안
+
+- 이 앱은 어떠한 사용자 개인정보도 수집하지 않습니다.
+- 모든 데이터는 로컬에서 처리되며, 외부 서버로 전송되지 않습니다.
+
+---
+
+## 🏁 향후 업데이트 예정
+
+- 주유 기록 저장 기능 (로컬)
+- 목표 옥탄가 맞추기 시뮬레이션 기능
+- UI 다크모드 지원
+
+---
+
+## 🏁 앱 다운로드
+
+- 구글 앱 심사중
+- 애플 미지원
+
+
+
