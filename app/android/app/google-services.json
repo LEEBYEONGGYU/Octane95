@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "717195133876",
+    "project_id": "octane95-69735",
+    "storage_bucket": "octane95-69735.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:717195133876:android:318bc891ef3cf2a3d7e8e1",
+        "android_client_info": {
+          "package_name": "com.octane.octane95"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDk5dGJPn0CSrHUXKHVxzbpwbx-tQztSGc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
