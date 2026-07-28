@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +7,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 
 import 'history_detail_page.dart';
 import 'model/car_profile.dart';
@@ -17,6 +16,11 @@ import 'model/octane_log.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final imagePicker = ImagePickerPlatform.instance;
+  if (imagePicker is ImagePickerAndroid) {
+    imagePicker.useAndroidPhotoPicker = true;
+  }
 
   await Hive.initFlutter();
   if (!Hive.isAdapterRegistered(0)) {
@@ -252,7 +256,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     _tabController = TabController(length: 6, vsync: this);
     _tabController.addListener(_syncMainTab);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _checkPhotoPermissionOnFirstLaunch();
       if (mounted) await _showOnboardingIfNeeded();
     });
   }
@@ -283,22 +286,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     setState(() => _currentMainTab = index);
     _logMainTabOpen(index);
     _tabController.animateTo(index);
-  }
-
-  Future<void> _checkPhotoPermissionOnFirstLaunch() async {
-    final prefs = await SharedPreferences.getInstance();
-    const checkedKey = 'photo_permission_checked_v1';
-    if (prefs.getBool(checkedKey) ?? false) return;
-
-    var permission = await Permission.photos.status;
-    if (!permission.isGranted && !permission.isLimited) {
-      permission = await Permission.photos.request();
-      if (Platform.isAndroid && permission.isDenied) {
-        await Permission.storage.request();
-      }
-    }
-
-    await prefs.setBool(checkedKey, true);
   }
 
   Future<void> _showOnboardingIfNeeded() async {
@@ -855,41 +842,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
   Future<Uint8List?> _pickCarPhoto() async {
     try {
-      var permission = await Permission.photos.request();
-      if (Platform.isAndroid && permission.isDenied) {
-        permission = await Permission.storage.request();
-      }
-
-      if (!permission.isGranted && !permission.isLimited) {
-        if (!mounted) return null;
-        if (permission.isPermanentlyDenied) {
-          final openSettings = await showDialog<bool>(
-            context: context,
-            builder:
-                (context) => AlertDialog(
-                  title: const Text('사진 접근 권한 필요'),
-                  content: const Text('차량 사진을 등록하려면 설정에서 사진 접근 권한을 허용해 주세요.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('취소'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('설정 열기'),
-                    ),
-                  ],
-                ),
-          );
-          if (openSettings == true) await openAppSettings();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('차량 사진 등록을 위해 사진 접근 권한을 허용해 주세요.')),
-          );
-        }
-        return null;
-      }
-
       final image = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         imageQuality: 82,
@@ -903,7 +855,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     } catch (_) {
       if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('사진을 불러오지 못했습니다. 사진 접근 권한을 확인해 주세요.')),
+        const SnackBar(content: Text('사진을 불러오지 못했습니다. 다시 선택해 주세요.')),
       );
       return null;
     }
