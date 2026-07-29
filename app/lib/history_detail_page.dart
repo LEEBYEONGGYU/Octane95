@@ -3,6 +3,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'model/car_profile.dart';
 import 'model/octane_log.dart';
+import 'services/analytics_service.dart';
+import 'utils/display_format.dart';
 
 class HistoryDetailPage extends StatefulWidget {
   final OctaneLog log;
@@ -29,6 +31,7 @@ class HistoryDetailPage extends StatefulWidget {
     'regularUnitPrice': '일반유 리터당 단가 (원)',
     'regularTotalCost': '일반유 총액 (원)',
     'totalCost': '총 주유 금액 (원)',
+    'station': '주유 장소',
   };
 
   @override
@@ -47,6 +50,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   @override
   Widget build(BuildContext context) {
     final status = _status(_log.result);
+    final visibleInputs = _log.inputs.entries.where(_shouldShowInput).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -78,11 +82,22 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
           _infoCard(
             title: '입력값',
             children:
-                _log.inputs.entries.map((entry) {
-                  final label =
-                      HistoryDetailPage.inputLabelMap[entry.key] ?? entry.key;
-                  return _row(label, entry.value.toString());
-                }).toList(),
+                visibleInputs.isEmpty
+                    ? [
+                      const Text(
+                        '저장된 계산 입력값이 없습니다.',
+                        style: TextStyle(color: Color(0xFF97A4B1)),
+                      ),
+                    ]
+                    : visibleInputs.map((entry) {
+                      final label =
+                          HistoryDetailPage.inputLabelMap[entry.key] ??
+                          entry.key;
+                      return _row(
+                        label,
+                        DisplayFormat.inputValue(entry.key, entry.value),
+                      );
+                    }).toList(),
           ),
           if (_log.memo.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -106,11 +121,14 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Text(
-                    _log.result.toStringAsFixed(2),
-                    style: const TextStyle(
-                      fontSize: 42,
-                      fontWeight: FontWeight.w900,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      DisplayFormat.ron(_log.result, detail: true),
+                      style: const TextStyle(
+                        fontSize: 42,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -120,7 +138,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: status.color.withOpacity(0.15),
+                      color: status.color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -203,14 +221,11 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   final updatedInputs = Map<String, dynamic>.from(_log.inputs);
                   for (final key in inputKeys) {
                     final text = controllers[key]!.text.trim();
-                    if (text.isEmpty &&
-                        (key == 'tankCapacity' ||
-                            key == 'unitPrice' ||
-                            key == 'totalCost')) {
+                    if (text.isEmpty && _optionalInputKeys.contains(key)) {
                       updatedInputs.remove(key);
                     } else {
                       updatedInputs[key] = text;
@@ -228,9 +243,11 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                     return;
                   }
 
-                  Hive.box<OctaneLog>(
+                  await Hive.box<OctaneLog>(
                     'octane_logs',
                   ).put(widget.logKey, updated);
+                  if (!mounted || !context.mounted) return;
+                  AnalyticsService.log('record_edited');
                   setState(() {
                     _log = updated;
                   });
@@ -286,6 +303,24 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     return [...keys, if (type != 'average') 'unitPrice', 'totalCost'];
   }
 
+  bool _shouldShowInput(MapEntry<String, dynamic> entry) {
+    if (!DisplayFormat.hasValue(entry.value)) return false;
+    if (!_optionalInputKeys.contains(entry.key)) return true;
+    final number = DisplayFormat.asDouble(entry.value);
+    return number == null || number > 0;
+  }
+
+  static const _optionalInputKeys = {
+    'tankCapacity',
+    'unitPrice',
+    'highUnitPrice',
+    'highTotalCost',
+    'regularUnitPrice',
+    'regularTotalCost',
+    'totalCost',
+    'station',
+  };
+
   OctaneLog? _buildUpdatedLog({
     required Map<String, dynamic> inputs,
     required String memo,
@@ -314,8 +349,9 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   }
 
   double? _recalculateResult(String type, Map<String, dynamic> inputs) {
-    final value =
-        (String key) => double.tryParse(inputs[key]?.toString().trim() ?? '');
+    double? value(String key) {
+      return double.tryParse(inputs[key]?.toString().trim() ?? '');
+    }
 
     if (type == 'average') {
       final high = value('highLiter');
@@ -419,7 +455,14 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
               ),
             ),
           ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
         ],
       ),
     );

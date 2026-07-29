@@ -2,8 +2,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,6 +11,9 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 import 'history_detail_page.dart';
 import 'model/car_profile.dart';
 import 'model/octane_log.dart';
+import 'services/analytics_service.dart';
+import 'services/review_prompt_service.dart';
+import 'utils/display_format.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,38 +34,11 @@ Future<void> main() async {
   }
 
   await Hive.openBox<CarProfile>('car_profile');
+  await ReviewPromptService.registerLaunch();
   await AnalyticsService.init();
   await AnalyticsService.logAppOpen();
 
   runApp(const OctaneApp());
-}
-
-class AnalyticsService {
-  static FirebaseAnalytics? _analytics;
-
-  static Future<void> init() async {
-    try {
-      await Firebase.initializeApp();
-      _analytics = FirebaseAnalytics.instance;
-    } catch (_) {
-      _analytics = null;
-    }
-  }
-
-  static Future<void> logAppOpen() async {
-    try {
-      await _analytics?.logAppOpen();
-    } catch (_) {}
-  }
-
-  static Future<void> log(
-    String name, {
-    Map<String, Object>? parameters,
-  }) async {
-    try {
-      await _analytics?.logEvent(name: name, parameters: parameters);
-    } catch (_) {}
-  }
 }
 
 class OctaneApp extends StatelessWidget {
@@ -247,6 +221,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   int _currentMainTab = 0;
   int _recordFilter = 0;
   bool _recordSearchVisible = false;
+  bool _reviewPromptInProgress = false;
   double? _touchedValue;
   int? _selectedSpotIndex;
 
@@ -406,7 +381,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     if (!confirmed) return;
 
     final box = Hive.box<OctaneLog>('octane_logs');
-    box.deleteAt(box.length - 1 - indexFromTop);
+    await box.deleteAt(box.length - 1 - indexFromTop);
+    AnalyticsService.log('record_deleted');
 
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -535,14 +511,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return Hive.box<CarProfile>('car_profile').get('main');
   }
 
-  void _saveLog({
+  Future<void> _saveLog({
     required String type,
     required double result,
     required Map<String, dynamic> inputs,
     String memo = '',
-  }) {
+  }) async {
     final box = Hive.box<OctaneLog>('octane_logs');
-    box.add(
+    await box.add(
       OctaneLog(
         time: DateTime.now(),
         type: type,
@@ -552,6 +528,64 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       ),
     );
     AnalyticsService.log('save_record', parameters: {'type': type});
+    AnalyticsService.log(
+      'record_saved',
+      parameters: {
+        'calculation_type': _analyticsCalculationType(type),
+        'has_cost': _hasCostData(inputs).toString(),
+        'has_memo': memo.trim().isNotEmpty.toString(),
+      },
+    );
+  }
+
+  String _analyticsCalculationType(String type) {
+    return switch (type) {
+      'average' => 'simple',
+      'mixed' => 'tank',
+      'target' => 'target',
+      _ => type,
+    };
+  }
+
+  bool _hasCostData(Map<String, dynamic> inputs) {
+    const costKeys = {
+      'unitPrice',
+      'totalCost',
+      'highUnitPrice',
+      'highTotalCost',
+      'regularUnitPrice',
+      'regularTotalCost',
+    };
+    return costKeys.any((key) {
+      final value = DisplayFormat.asDouble(inputs[key]);
+      return value != null && value > 0;
+    });
+  }
+
+  bool _hasCostInputForCurrentCalculation() {
+    if (_recordInputMode == 0) return false;
+    final controllers =
+        _isAverageMode
+            ? [
+              highPriceCtrl,
+              highTotalCostCtrl,
+              regularPriceCtrl,
+              regularTotalCostCtrl,
+              totalCostCtrl,
+            ]
+            : [priceCtrl, totalCostCtrl];
+    return controllers.any((controller) => controller.text.trim().isNotEmpty);
+  }
+
+  void _logCalculationCompleted(String calculationType) {
+    AnalyticsService.log(
+      'calculate_completed',
+      parameters: {
+        'calculation_type': calculationType,
+        'has_vehicle': (_mainCar() != null).toString(),
+        'has_cost_input': _hasCostInputForCurrentCalculation().toString(),
+      },
+    );
   }
 
   _Status _status(double v) {
@@ -628,11 +662,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
-  void _saveAverageLog() {
+  Future<void> _saveAverageLog() async {
     final value = _avgResult;
     if (value == null || value <= 0) return;
 
-    _saveLog(
+    await _saveLog(
       type: 'average',
       result: value,
       inputs: {
@@ -642,6 +676,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       },
       memo: _recordMemo(),
     );
+    if (!mounted) return;
     setState(() {
       _avgResult = null;
       _avgComment = null;
@@ -649,11 +684,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     _showSavedSnackBar();
   }
 
-  void _saveMixedLog() {
+  Future<void> _saveMixedLog() async {
     final value = _mixResult;
     if (value == null || value <= 0) return;
 
-    _saveLog(
+    await _saveLog(
       type: 'mixed',
       result: value,
       inputs: {
@@ -669,6 +704,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       },
       memo: _recordMemo(),
     );
+    if (!mounted) return;
     setState(() {
       _mixResult = null;
       _mixComment = null;
@@ -676,7 +712,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     _showSavedSnackBar();
   }
 
-  void _saveTargetLog() {
+  Future<void> _saveTargetLog() async {
     final value = _targetResultOctane;
     final requiredLiter = _targetRequiredLiter;
     if (value == null ||
@@ -686,7 +722,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       return;
     }
 
-    _saveLog(
+    await _saveLog(
       type: 'target',
       result: value,
       inputs: {
@@ -699,6 +735,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       },
       memo: _recordMemo(),
     );
+    if (!mounted) return;
     setState(() {
       _targetRequiredLiter = null;
       _targetResultOctane = null;
@@ -712,6 +749,69 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('✅ 기록이 저장되었습니다.')));
+    _scheduleReviewPromptCheck();
+  }
+
+  void _scheduleReviewPromptCheck() {
+    Future<void>.delayed(const Duration(milliseconds: 700), () async {
+      if (mounted) await _maybeShowReviewPrompt();
+    });
+  }
+
+  Future<void> _maybeShowReviewPrompt() async {
+    if (_reviewPromptInProgress) return;
+
+    final recordCount = Hive.box<OctaneLog>('octane_logs').length;
+    final eligible = await ReviewPromptService.isEligible(
+      recordCount: recordCount,
+    );
+    if (!eligible || !mounted) return;
+
+    _reviewPromptInProgress = true;
+    await ReviewPromptService.markShown(recordCount: recordCount);
+    if (!mounted) {
+      _reviewPromptInProgress = false;
+      return;
+    }
+    AnalyticsService.log('review_prompt_shown');
+
+    final action = await showDialog<_ReviewPromptAction>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('고급유 노트가 주유 관리에 도움이 되었나요?'),
+            content: const Text('짧은 평가가 앱을 개선하는 데 큰 도움이 됩니다.'),
+            actions: [
+              TextButton(
+                onPressed:
+                    () =>
+                        Navigator.pop(dialogContext, _ReviewPromptAction.later),
+                child: const Text('나중에'),
+              ),
+              FilledButton(
+                onPressed:
+                    () => Navigator.pop(
+                      dialogContext,
+                      _ReviewPromptAction.accepted,
+                    ),
+                child: const Text('평가 남기기'),
+              ),
+            ],
+          ),
+    );
+
+    if (action == _ReviewPromptAction.accepted) {
+      AnalyticsService.log('review_prompt_accepted');
+      await ReviewPromptService.markAccepted();
+      try {
+        await ReviewPromptService.requestReview();
+      } catch (_) {}
+    } else if (action == _ReviewPromptAction.later) {
+      AnalyticsService.log('review_prompt_later');
+    }
+
+    _reviewPromptInProgress = false;
   }
 
   void _onCalcAverage() {
@@ -721,6 +821,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       _avgComment = _statusSentence(value);
     });
     AnalyticsService.log('calculate_simple');
+    if (value > 0) {
+      _logCalculationCompleted('simple');
+    }
   }
 
   void _onCalcMixed() {
@@ -730,6 +833,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       _mixComment = _statusSentence(value);
     });
     AnalyticsService.log('calculate_tank');
+    if (value > 0) {
+      _logCalculationCompleted('tank');
+    }
   }
 
   Map<String, dynamic> _recordInputs() {
@@ -815,19 +921,23 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       }
     });
     AnalyticsService.log('calculate_target');
+    if (!impossible && _targetResultOctane != null) {
+      _logCalculationCompleted('target');
+    }
   }
 
-  void _saveCarProfile({
+  Future<void> _saveCarProfile({
     required String name,
     required int year,
     required double recommend,
     required double warning,
     double? tank,
     Uint8List? photoBytes,
-  }) {
+  }) async {
     final box = Hive.box<CarProfile>('car_profile');
+    final isFirstVehicle = !box.containsKey('main');
 
-    box.put(
+    await box.put(
       'main',
       CarProfile(
         name: name,
@@ -837,6 +947,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         photoBytes: photoBytes,
         tankCapacity: tank, // ?뵦 異붽?
       ),
+    );
+    AnalyticsService.log(
+      'vehicle_saved',
+      parameters: {
+        'is_first_vehicle': isFirstVehicle.toString(),
+        'has_photo': (photoBytes != null && photoBytes.isNotEmpty).toString(),
+      },
     );
   }
 
@@ -1060,9 +1177,15 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 MediaQuery.of(context).padding.bottom + 18,
               ),
               children: [
-                if (car == null && logs.isEmpty)
-                  _firstRunHomeCard()
-                else ...[
+                if (car == null) ...[
+                  _firstRunHomeCard(),
+                  if (latest != null) ...[
+                    const SizedBox(height: 14),
+                    _dashboardRecentFuelCard(latest),
+                    const SizedBox(height: 14),
+                    _dashboardSevenDayCard(logs),
+                  ],
+                ] else ...[
                   _homeSummaryCard(car, latest),
                   const SizedBox(height: 14),
                   _dashboardRecentFuelCard(latest),
@@ -1104,7 +1227,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
           const SizedBox(height: 14),
           const Text(
-            '차량 정보를 설정하면 내 차량 기준에 맞춰 옥탄가 상태를 확인할 수 있어요.',
+            '차량 정보를 설정하면\n내 차량 권장 기준에 맞춰 옥탄가 상태를 확인할 수 있어요.',
             style: TextStyle(
               color: Color(0xFFB8C4D1),
               fontSize: 14,
@@ -1234,7 +1357,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
           const SizedBox(height: 18),
           _darkActionButton(
-            '옥탄가 계산하기',
+            latest == null ? '첫 옥탄가 계산하기' : '옥탄가 계산하기',
             Icons.calculate_rounded,
             () => _goToMainTab(2),
           ),
@@ -1732,35 +1855,20 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   double? _asDouble(Object? value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    final text = value.toString().replaceAll(',', '').trim();
-    if (text.isEmpty) return null;
-    return double.tryParse(text);
+    return DisplayFormat.asDouble(value);
   }
 
-  String _formatWon(double value) {
-    final text = value.round().toString();
-    final buffer = StringBuffer();
-    for (var i = 0; i < text.length; i++) {
-      final reverseIndex = text.length - i;
-      buffer.write(text[i]);
-      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
-        buffer.write(',');
-      }
-    }
-    return '${buffer}원';
-  }
+  String _formatWon(double value) => DisplayFormat.won(value);
 
   String _formatRon(double value, {bool detail = false}) {
-    return '${value.toStringAsFixed(detail ? 2 : 1)} RON';
+    return DisplayFormat.ron(value, detail: detail);
   }
 
-  String _formatLiter(double value) => '${value.toStringAsFixed(1)} L';
+  String _formatLiter(double value) => DisplayFormat.liter(value);
 
   String _signedDiff(double value) {
     final sign = value >= 0 ? '+' : '-';
-    return '$sign${value.abs().toStringAsFixed(1)}';
+    return '$sign${DisplayFormat.decimal(value.abs(), 1)}';
   }
 
   double? _pendingResultValue() {
@@ -2894,7 +3002,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final value =
         _targetRequiredLiter == null
             ? '--'
-            : '${_targetRequiredLiter!.toStringAsFixed(1)}L';
+            : _formatLiter(_targetRequiredLiter!);
     final resultOctane = _targetResultOctane;
 
     return Card(
@@ -2920,13 +3028,16 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 58,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.8,
-                color: Colors.white,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 58,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                  color: Colors.white,
+                ),
               ),
             ),
             if (!_targetImpossible && _targetRequiredLiter != null) ...[
@@ -3008,13 +3119,16 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 duration: const Duration(milliseconds: 420),
                 curve: Curves.easeOutCubic,
                 builder: (context, animatedValue, _) {
-                  return Text(
-                    animatedValue.toStringAsFixed(2),
-                    style: const TextStyle(
-                      fontSize: 60,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.8,
-                      color: Colors.white,
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      DisplayFormat.decimal(animatedValue, 2),
+                      style: const TextStyle(
+                        fontSize: 60,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                        color: Colors.white,
+                      ),
                     ),
                   );
                 },
@@ -3593,7 +3707,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         ),
         _moreFeatureTile(
           '주유소 찾기',
-          '주유 기록과 연동할 위치 관리 기능을 준비해요',
+          '주유 기록과 연동되는 위치 관리 기능을 준비하고 있어요.',
           Icons.location_on_outlined,
           () => _showFeatureSheet('주유소 찾기', _stationFinderComingSoon()),
           badge: '준비 중',
@@ -3607,13 +3721,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           () => _showFeatureSheet('월간 리포트', _monthlyFeature()),
         ),
         const SizedBox(height: 8),
-        _moreGroupLabel('앱 설정'),
-        _moreFeatureTile(
-          '설정',
-          '차량 기준과 기본 정보를 관리해요',
-          Icons.settings_outlined,
-          () => _goToMainTab(4),
-        ),
+        _moreGroupLabel('도움말'),
         _moreFeatureTile(
           '사용 방법',
           '사용 방법과 기록 기준을 확인해요',
@@ -4025,43 +4133,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
-  Widget _additiveFeature() {
-    return _darkDashboardCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '사용 중인 첨가제',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 12),
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 22),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.science_outlined,
-                    color: Color(0xFF607181),
-                    size: 34,
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    '저장된 첨가제 기록이 없습니다.',
-                    style: TextStyle(
-                      color: Color(0xFF97A4B1),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _monthlyFeature() {
     final now = DateTime.now();
     final logs =
@@ -4137,106 +4208,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
-  Widget _aiFeature() {
-    final logs = Hive.box<OctaneLog>('octane_logs').values.toList();
-    final recent = logs.length > 5 ? logs.sublist(logs.length - 5) : logs;
-    final car = _mainCar();
-    final insights = <Widget>[];
-
-    if (logs.length < 5) {
-      insights.add(
-        _featureInsight(
-          '기록이 ${logs.length}개 저장되어 있습니다.',
-          '신뢰할 수 있는 분석을 위해 기록이 5개 이상 필요합니다.',
-        ),
-      );
-    } else {
-      final values = recent.map((log) => log.result).toList();
-      final average = values.reduce((a, b) => a + b) / values.length;
-      final min = values.reduce((a, b) => a < b ? a : b);
-      final max = values.reduce((a, b) => a > b ? a : b);
-      insights.add(
-        _featureInsight(
-          '최근 평균 옥탄가 ${average.toStringAsFixed(1)} RON',
-          '최근 ${recent.length}회 기록의 범위는 ${min.toStringAsFixed(1)}~${max.toStringAsFixed(1)} RON입니다.',
-        ),
-      );
-      if (car != null) {
-        final belowRecommended =
-            recent.where((log) => log.result < car.recommendedOctane).length;
-        insights.add(
-          _featureInsight(
-            belowRecommended == 0
-                ? '모든 최근 기록이 권장 기준을 충족했습니다.'
-                : '최근 기록 중 $belowRecommended회가 권장 기준 미만입니다.',
-            '차량 권장 기준 ${car.recommendedOctane.toStringAsFixed(1)} RON과 비교한 결과입니다.',
-          ),
-        );
-      }
-      final costs = recent.map(_logCost).whereType<double>().toList();
-      if (costs.isNotEmpty) {
-        final total = costs.fold<double>(0, (sum, cost) => sum + cost);
-        insights.add(
-          _featureInsight(
-            '최근 입력 주유비 ${_formatWon(total)}',
-            '금액을 입력한 ${costs.length}개 기록의 합계입니다.',
-          ),
-        );
-      }
-    }
-
-    return _darkDashboardCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'AI 인사이트',
-            style: TextStyle(
-              color: Color(0xFF00D084),
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...insights,
-        ],
-      ),
-    );
-  }
-
-  Widget _featureInsight(String title, String subtitle) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 9),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0E1A26),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              color: Color(0xFF97A4B1),
-              fontSize: 11,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildHistoryTab() {
     return ValueListenableBuilder(
       valueListenable: Hive.box<OctaneLog>('octane_logs').listenable(),
@@ -4266,7 +4237,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                       ),
                       const SizedBox(height: 7),
                       const Text(
-                        '기록을 저장하면 옥탄가 통계를 확인할 수 있어요.',
+                        '계산 결과를 저장하면\n옥탄가 통계를 확인할 수 있어요.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Color(0xFF97A4B1),
@@ -4332,7 +4303,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
           const SizedBox(height: 18),
           const Text(
-            '현재 기록',
+            '현재 기록 1개',
             style: TextStyle(
               color: Color(0xFF97A4B1),
               fontSize: 12,
@@ -4352,7 +4323,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           const Divider(color: Color(0xFF1B3852)),
           const SizedBox(height: 12),
           const Text(
-            '추세를 확인하려면 기록이 2개 이상 필요합니다.',
+            '추세를 확인하려면\n기록이 2개 이상 필요합니다.',
             style: TextStyle(
               color: Color(0xFFB8C4D1),
               fontSize: 13,
@@ -4446,7 +4417,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${diff >= 0 ? '+' : '-'}${diff.abs().toStringAsFixed(2)}',
+                          '${diff >= 0 ? '+' : '-'}${DisplayFormat.decimal(diff.abs(), 1)}',
                           style: TextStyle(
                             color:
                                 diff >= 0
@@ -4782,7 +4753,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   ),
                 ),
                 Text(
-                  latest.result.toStringAsFixed(2),
+                  _formatRon(latest.result),
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
@@ -4911,15 +4882,17 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   ),
                 ),
                 Text(
-                  log.result.toStringAsFixed(2),
+                  DisplayFormat.decimal(log.result, 1),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(width: 10),
-                _diffPill(diff, isUp),
+                if (previous != null) ...[
+                  const SizedBox(width: 10),
+                  _diffPill(diff, isUp),
+                ],
                 const SizedBox(width: 6),
                 Icon(Icons.chevron_right_rounded, color: Colors.grey.shade500),
               ],
@@ -4947,7 +4920,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           Icon(icon, color: color, size: 14),
           const SizedBox(width: 2),
           Text(
-            '${isUp ? '+' : '-'}${diff.abs().toStringAsFixed(2)}',
+            '${isUp ? '+' : '-'}${DisplayFormat.decimal(diff.abs(), 1)}',
             style: TextStyle(
               color: color,
               fontSize: 12,
@@ -5064,12 +5037,12 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               ),
               const SizedBox(width: 12),
               Text(
-                log.result.toStringAsFixed(2),
+                DisplayFormat.decimal(log.result, 1),
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
                   color: Colors.black87,
-                  letterSpacing: -0.4,
+                  letterSpacing: 0,
                 ),
               ),
             ],
@@ -5573,7 +5546,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             ),
             const SizedBox(height: 14),
             ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
                 final name = carNameCtrl.text.trim();
                 final year = int.tryParse(carYearCtrl.text.trim());
                 final recommend = double.tryParse(carRecCtrl.text.trim());
@@ -5605,7 +5578,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   return;
                 }
 
-                _saveCarProfile(
+                await _saveCarProfile(
                   name: name,
                   year: year!,
                   recommend: recommend!,
@@ -5613,6 +5586,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   tank: tank,
                   photoBytes: _selectedCarPhoto,
                 );
+                if (!mounted || !context.mounted) return;
 
                 FocusScope.of(context).unfocus();
                 if (closeOnSave && Navigator.of(context).canPop()) {
@@ -5979,6 +5953,8 @@ class _Status {
 
   const _Status(this.label, this.message, this.icon, this.color);
 }
+
+enum _ReviewPromptAction { accepted, later }
 
 class _TankInsight {
   final String title;
