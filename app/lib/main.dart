@@ -12,6 +12,7 @@ import 'history_detail_page.dart';
 import 'model/car_profile.dart';
 import 'model/octane_log.dart';
 import 'services/analytics_service.dart';
+import 'services/backup_service.dart';
 import 'services/review_prompt_service.dart';
 import 'utils/display_format.dart';
 
@@ -222,6 +223,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   int _recordFilter = 0;
   bool _recordSearchVisible = false;
   bool _reviewPromptInProgress = false;
+  bool _dataOperationInProgress = false;
   double? _touchedValue;
   int? _selectedSpotIndex;
 
@@ -258,9 +260,21 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   void _goToMainTab(int index) {
+    if (index == 2 && _calcMode == 1) {
+      _prefillTankOctaneFromLatestRecord();
+    }
     setState(() => _currentMainTab = index);
     _logMainTabOpen(index);
     _tabController.animateTo(index);
+  }
+
+  void _prefillTankOctaneFromLatestRecord() {
+    if (beforeOctaneCtrl.text.trim().isNotEmpty) return;
+
+    final box = Hive.box<OctaneLog>('octane_logs');
+    if (box.isEmpty) return;
+
+    beforeOctaneCtrl.text = DisplayFormat.decimal(box.values.last.result, 2);
   }
 
   Future<void> _showOnboardingIfNeeded() async {
@@ -2577,6 +2591,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return Expanded(
       child: GestureDetector(
         onTap: () {
+          if (mode == 1) {
+            _prefillTankOctaneFromLatestRecord();
+          }
           setState(() {
             _calcMode = mode;
           });
@@ -3688,6 +3705,371 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return '${time.month}월 ${time.day}일 (${weekdays[time.weekday - 1]}) $hour:$minute';
   }
 
+  Future<void> _exportBackup() async {
+    if (_dataOperationInProgress) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (dialogContext) => AlertDialog(
+                title: const Text('백업 파일 내보내기'),
+                content: const Text(
+                  '백업 파일에는 차량 정보와 주유 기록, 메모가 포함될 수 있습니다.\n\n'
+                  '차량 사진은 포함되지 않습니다. 안전한 위치에 보관해 주세요.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('취소'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    icon: const Icon(Icons.upload_file_outlined),
+                    label: const Text('내보내기'),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _dataOperationInProgress = true);
+    try {
+      final document = await BackupService.captureCurrentData();
+      AnalyticsService.log(
+        'backup_export_started',
+        parameters: _backupAnalyticsParameters(document),
+      );
+      final result = await BackupService.export(document);
+      if (!mounted) return;
+
+      if (result == BackupExportResult.cancelled) {
+        _showDataSnackBar('백업 파일 공유를 취소했습니다.');
+        return;
+      }
+      AnalyticsService.log(
+        'backup_export_completed',
+        parameters: _backupAnalyticsParameters(document),
+      );
+      _showDataSnackBar('백업 파일을 생성했습니다. 안전한 위치에 보관해 주세요.');
+    } on BackupOperationException catch (error) {
+      AnalyticsService.log(
+        'backup_export_failed',
+        parameters: {'failure_stage': error.failureStage},
+      );
+      if (mounted) {
+        _showDataSnackBar('백업 파일을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+    } catch (_) {
+      AnalyticsService.log(
+        'backup_export_failed',
+        parameters: const {'failure_stage': 'write'},
+      );
+      if (mounted) {
+        _showDataSnackBar('백업 파일을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+    } finally {
+      if (mounted) setState(() => _dataOperationInProgress = false);
+    }
+  }
+
+  Future<void> _restoreBackup() async {
+    if (_dataOperationInProgress) return;
+    AnalyticsService.log('restore_started');
+    setState(() => _dataOperationInProgress = true);
+    try {
+      final document = await BackupService.pickAndValidate();
+      if (document == null || !mounted) return;
+
+      AnalyticsService.log(
+        'restore_validated',
+        parameters: _backupAnalyticsParameters(document),
+      );
+      final confirmed = await _showRestorePreview(document);
+      if (!confirmed || !mounted) return;
+
+      await BackupService.restore(document);
+      if (!mounted) return;
+      _resetAfterDataChange();
+      AnalyticsService.log(
+        'restore_completed',
+        parameters: _backupAnalyticsParameters(document),
+      );
+      _showDataSnackBar('데이터 복구가 완료되었습니다.');
+    } on BackupValidationException catch (error) {
+      AnalyticsService.log(
+        'restore_failed',
+        parameters: const {'failure_stage': 'validation'},
+      );
+      if (!mounted) return;
+      final message =
+          error.error == BackupValidationError.unsupportedVersion
+              ? '지원하지 않는 버전의 백업 파일입니다. 앱을 최신 버전으로 업데이트한 후 다시 시도해 주세요.'
+              : '고급유 노트에서 생성한 올바른 백업 파일이 아닙니다.';
+      _showDataSnackBar(message);
+    } on BackupOperationException catch (error) {
+      AnalyticsService.log(
+        'restore_failed',
+        parameters: {'failure_stage': error.failureStage},
+      );
+      if (mounted) {
+        _showDataSnackBar('데이터를 복구하지 못했습니다. 기존 데이터는 유지됩니다.');
+      }
+    } catch (_) {
+      AnalyticsService.log(
+        'restore_failed',
+        parameters: const {'failure_stage': 'write'},
+      );
+      if (mounted) {
+        _showDataSnackBar('데이터를 복구하지 못했습니다. 기존 데이터는 유지됩니다.');
+      }
+    } finally {
+      if (mounted) setState(() => _dataOperationInProgress = false);
+    }
+  }
+
+  Future<bool> _showRestorePreview(BackupDocument document) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('복구 미리보기'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _restorePreviewRow(
+                    '백업 일시',
+                    _backupDateTime(document.exportedAt),
+                  ),
+                  _restorePreviewRow('앱 버전', document.appVersion),
+                  _restorePreviewRow('차량', '${document.vehicleCount}대'),
+                  _restorePreviewRow('주유 기록', '${document.recordCount}개'),
+                  _restorePreviewRow(
+                    '설정 데이터',
+                    document.includesSettings ? '포함' : '없음',
+                  ),
+                  const Divider(height: 28),
+                  const Text(
+                    '차량 사진은 포함되지 않은 백업입니다.',
+                    style: TextStyle(
+                      color: Color(0xFFFFC857),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    '현재 데이터를 백업 파일의 데이터로 교체합니다.\n\n'
+                    '기존 차량 정보와 주유 기록은 삭제되며, 복구 후 되돌릴 수 없습니다.',
+                    style: TextStyle(height: 1.45),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFD94F4F),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('복구하기'),
+              ),
+            ],
+          ),
+    );
+    return result ?? false;
+  }
+
+  Widget _restorePreviewRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFF97A4B1)),
+            ),
+          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteAllData() async {
+    if (_dataOperationInProgress) return;
+    final continueDelete =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (dialogContext) => AlertDialog(
+                title: const Text('전체 데이터 삭제'),
+                content: const Text(
+                  '모든 차량 정보와 주유 기록을 삭제할까요?\n\n'
+                  '차량 사진과 앱 설정도 함께 삭제되며 복구할 수 없습니다.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('취소'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFD94F4F),
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('계속'),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+    if (!continueDelete || !mounted) return;
+
+    var confirmationText = '';
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (dialogContext) => StatefulBuilder(
+                builder:
+                    (context, setDialogState) => AlertDialog(
+                      title: const Text('삭제 확인'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('삭제하려면 아래에 "삭제"를 입력해 주세요.'),
+                          const SizedBox(height: 14),
+                          TextField(
+                            autofocus: true,
+                            onChanged:
+                                (value) => setDialogState(
+                                  () => confirmationText = value.trim(),
+                                ),
+                            decoration: const InputDecoration(hintText: '삭제'),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('취소'),
+                        ),
+                        FilledButton(
+                          onPressed:
+                              confirmationText == '삭제'
+                                  ? () => Navigator.pop(dialogContext, true)
+                                  : null,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFD94F4F),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('모두 삭제'),
+                        ),
+                      ],
+                    ),
+              ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _dataOperationInProgress = true);
+    try {
+      await BackupService.deleteAllData();
+      if (!mounted) return;
+      _resetAfterDataChange();
+      AnalyticsService.log('all_data_deleted');
+      _showDataSnackBar('모든 데이터를 삭제했습니다.');
+      await _showOnboardingIfNeeded();
+    } on BackupOperationException {
+      if (mounted) {
+        _showDataSnackBar('데이터를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+    } finally {
+      if (mounted) setState(() => _dataOperationInProgress = false);
+    }
+  }
+
+  void _resetAfterDataChange() {
+    for (final controller in [
+      highFuelCtrl,
+      regFuelCtrl,
+      beforeLiterCtrl,
+      beforeOctaneCtrl,
+      addLiterCtrl,
+      addOctaneCtrl,
+      mixTankCtrl,
+      targetOctaneCtrl,
+      targetCurrentLiterCtrl,
+      targetCurrentOctaneCtrl,
+      targetFuelOctaneCtrl,
+      priceCtrl,
+      totalCostCtrl,
+      highPriceCtrl,
+      highTotalCostCtrl,
+      regularPriceCtrl,
+      regularTotalCostCtrl,
+      memoCtrl,
+      carNameCtrl,
+      carYearCtrl,
+      carRecCtrl,
+      carWarnCtrl,
+      carTankCtrl,
+      recordSearchCtrl,
+    ]) {
+      controller.clear();
+    }
+
+    final car = _mainCar();
+    if (car != null) _fillCarForm(car);
+    setState(() {
+      _selectedCarPhoto = car?.photoBytes;
+      _avgResult = null;
+      _avgComment = null;
+      _mixResult = null;
+      _mixComment = null;
+      _targetRequiredLiter = null;
+      _targetComment = null;
+      _targetImpossible = false;
+      _targetResultOctane = null;
+      _recordFilter = 0;
+      _recordSearchVisible = false;
+      _touchedValue = null;
+      _selectedSpotIndex = null;
+      _currentMainTab = 0;
+    });
+    _tabController.animateTo(0);
+  }
+
+  Map<String, Object> _backupAnalyticsParameters(BackupDocument document) {
+    return {
+      'vehicle_count': document.vehicleCount,
+      'record_count': document.recordCount,
+      'backup_format_version': BackupService.currentBackupFormatVersion,
+      'includes_images': 'false',
+    };
+  }
+
+  String _backupDateTime(DateTime time) {
+    return '${time.year}.${time.month.toString().padLeft(2, '0')}.${time.day.toString().padLeft(2, '0')} '
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _showDataSnackBar(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Widget _buildMoreTab() {
     return ListView(
       padding: _listPadding(context),
@@ -3698,6 +4080,27 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           Icons.more_horiz_rounded,
         ),
         const SizedBox(height: 16),
+        _moreGroupLabel('데이터 관리'),
+        _moreFeatureTile(
+          '백업 파일 내보내기',
+          '차량 정보와 주유 기록을 파일로 저장합니다.',
+          Icons.upload_file_outlined,
+          _exportBackup,
+        ),
+        _moreFeatureTile(
+          '백업 파일에서 복구',
+          '이전에 저장한 백업 파일로 데이터를 복원합니다.',
+          Icons.restore_outlined,
+          _restoreBackup,
+        ),
+        _moreFeatureTile(
+          '전체 데이터 삭제',
+          '이 기기의 모든 차량 정보와 기록을 삭제합니다.',
+          Icons.delete_forever_outlined,
+          _deleteAllData,
+          accentColor: const Color(0xFFFF6B6B),
+        ),
+        const SizedBox(height: 8),
         _moreGroupLabel('관리 도구'),
         _moreFeatureTile(
           '주유비 관리',
@@ -3827,6 +4230,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     IconData icon,
     VoidCallback onTap, {
     String? badge,
+    Color accentColor = const Color(0xFF00E58A),
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -3838,11 +4242,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             horizontal: 15,
             vertical: 5,
           ),
-          leading: Icon(icon, color: const Color(0xFF00E58A), size: 26),
+          leading: Icon(icon, color: accentColor, size: 26),
           title: Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color:
+                  accentColor == const Color(0xFFFF6B6B)
+                      ? accentColor
+                      : Colors.white,
               fontWeight: FontWeight.w900,
             ),
           ),

@@ -61,6 +61,12 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
             onPressed: _showEditSheet,
             icon: const Icon(Icons.edit_outlined),
           ),
+          IconButton(
+            tooltip: '기록 삭제',
+            onPressed: _confirmDelete,
+            color: Colors.redAccent,
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -162,6 +168,39 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text('기록 삭제'),
+                content: const Text('이 기록을 삭제할까요? 삭제 후에는 복구할 수 없습니다.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('취소'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('삭제'),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+
+    if (!confirmed || !mounted) return;
+
+    await Hive.box<OctaneLog>('octane_logs').delete(widget.logKey);
+    AnalyticsService.log('record_deleted');
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context, true);
+    messenger.showSnackBar(const SnackBar(content: Text('기록을 삭제했습니다.')));
   }
 
   Future<void> _showEditSheet() async {
