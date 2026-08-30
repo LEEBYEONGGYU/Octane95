@@ -22,13 +22,16 @@ class OctaneLogAdapter extends TypeAdapter<OctaneLog> {
       result: fields[2] as double,
       inputs: (fields[3] as Map).cast<String, dynamic>(),
       memo: fields[4] as String,
+      stationName: fields[5] as String?,
+      odometer: (fields[6] as num?)?.toDouble(),
+      isFullTank: fields[7] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, OctaneLog obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.time)
       ..writeByte(1)
@@ -38,7 +41,13 @@ class OctaneLogAdapter extends TypeAdapter<OctaneLog> {
       ..writeByte(3)
       ..write(obj.inputs)
       ..writeByte(4)
-      ..write(obj.memo);
+      ..write(obj.memo)
+      ..writeByte(5)
+      ..write(obj.stationName)
+      ..writeByte(6)
+      ..write(obj.odometer)
+      ..writeByte(7)
+      ..write(obj.isFullTank);
   }
 
   @override

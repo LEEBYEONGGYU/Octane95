@@ -50,6 +50,7 @@ class DisplayFormat {
     if (_totalCostKeys.contains(key)) return won(value);
     if (_literKeys.contains(key)) return liter(value);
     if (_octaneKeys.contains(key)) return '${decimal(value, 2)} RON';
+    if (_odometerKeys.contains(key)) return '${groupedInteger(value)} km';
     return rawValue.toString().trim();
   }
 
@@ -73,6 +74,7 @@ class DisplayFormat {
     'tankCapacity',
     'currentLiter',
     'requiredLiter',
+    'expectedTotalLiter',
   };
 
   static const _octaneKeys = {
@@ -81,5 +83,8 @@ class DisplayFormat {
     'targetOctane',
     'currentOctane',
     'fuelOctane',
+    'expectedFinalOctane',
   };
+
+  static const _odometerKeys = {'odometer'};
 }

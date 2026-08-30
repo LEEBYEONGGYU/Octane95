@@ -78,6 +78,9 @@ class BackupDocument {
       'result': record.result,
       'inputs': Map<String, dynamic>.from(record.inputs),
       'memo': record.memo,
+      'stationName': record.stationName,
+      'odometer': record.odometer,
+      'isFullTank': record.isFullTank,
     };
   }
 }
@@ -419,6 +422,10 @@ class BackupService {
     final result = _finiteDouble(json?['result']);
     final inputs = _stringMap(json?['inputs']);
     final memo = json?['memo'];
+    final stationName = json?['stationName'];
+    final rawOdometer = json?['odometer'];
+    final odometer = rawOdometer == null ? null : _finiteDouble(rawOdometer);
+    final isFullTank = json?['isFullTank'] ?? false;
     final time = timeText is String ? DateTime.tryParse(timeText) : null;
     if (json == null ||
         time == null ||
@@ -427,6 +434,9 @@ class BackupService {
         result == null ||
         inputs == null ||
         memo is! String ||
+        (stationName != null && stationName is! String) ||
+        (rawOdometer != null && (odometer == null || odometer < 0)) ||
+        isFullTank is! bool ||
         !inputs.values.every(_isJsonScalar)) {
       throw const BackupValidationException(BackupValidationError.invalidFile);
     }
@@ -436,6 +446,12 @@ class BackupService {
       result: result,
       inputs: inputs,
       memo: memo,
+      stationName:
+          stationName is String && stationName.trim().isNotEmpty
+              ? stationName.trim()
+              : null,
+      odometer: odometer,
+      isFullTank: isFullTank,
     );
   }
 
@@ -484,6 +500,9 @@ class BackupService {
       result: source.result,
       inputs: Map<String, dynamic>.from(source.inputs),
       memo: source.memo,
+      stationName: source.stationName,
+      odometer: source.odometer,
+      isFullTank: source.isFullTank,
     );
   }
 

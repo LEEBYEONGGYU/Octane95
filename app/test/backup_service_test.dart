@@ -51,6 +51,9 @@ void main() {
               'totalCost': '59400',
             },
             memo: '장거리 주행 전 주유',
+            stationName: '테스트 주유소',
+            odometer: 171420,
+            isFullTank: true,
           ),
         ],
         onboardingShown: true,
@@ -68,7 +71,34 @@ void main() {
       expect(restored.records.single.result, 95.25);
       expect(restored.records.single.inputs['totalCost'], '59400');
       expect(restored.records.single.memo, '장거리 주행 전 주유');
+      expect(restored.records.single.stationName, '테스트 주유소');
+      expect(restored.records.single.odometer, 171420);
+      expect(restored.records.single.isFullTank, isTrue);
       expect(restored.onboardingShown, isTrue);
+    });
+
+    test('accepts older backups without new fuel-record fields', () {
+      final restored = BackupService.decodeAndValidate('''
+        {
+          "appId": "premium_fuel_note",
+          "backupFormatVersion": 1,
+          "appVersion": "1.0.2",
+          "exportedAt": "2026-08-02T14:23:00Z",
+          "vehicles": [],
+          "records": [{
+            "time": "2026-08-02T14:23:00Z",
+            "type": "mixed",
+            "result": 95.0,
+            "inputs": {},
+            "memo": ""
+          }],
+          "settings": {}
+        }
+      ''');
+
+      expect(restored.records.single.stationName, isNull);
+      expect(restored.records.single.odometer, isNull);
+      expect(restored.records.single.isFullTank, isFalse);
     });
 
     test('rejects malformed JSON and another app backup', () {

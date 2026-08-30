@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'model/car_profile.dart';
@@ -25,6 +26,8 @@ class HistoryDetailPage extends StatefulWidget {
     'currentOctane': '현재 추정 옥탄가',
     'fuelOctane': '넣을 연료 옥탄가',
     'requiredLiter': '필요 주유량 (L)',
+    'expectedTotalLiter': '주유 후 예상 총 연료량 (L)',
+    'expectedFinalOctane': '최종 예상 옥탄가',
     'unitPrice': '리터당 단가 (원)',
     'highUnitPrice': '고급유 리터당 단가 (원)',
     'highTotalCost': '고급유 총액 (원)',
@@ -104,6 +107,20 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                         DisplayFormat.inputValue(entry.key, entry.value),
                       );
                     }).toList(),
+          ),
+          const SizedBox(height: 12),
+          _infoCard(
+            title: '주유 정보',
+            children: [
+              _row('주유소', _log.stationName?.trim().isNotEmpty == true ? _log.stationName!.trim() : '입력 안 됨'),
+              _row(
+                '현재 주행거리',
+                _log.odometer == null
+                    ? '입력 안 됨'
+                    : '${DisplayFormat.groupedInteger(_log.odometer!)} km',
+              ),
+              _row('가득 주유', _log.isFullTank ? '예' : '아니오'),
+            ],
           ),
           if (_log.memo.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -210,22 +227,28 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
         key: TextEditingController(text: _log.inputs[key]?.toString() ?? ''),
     };
     final memoController = TextEditingController(text: _log.memo);
+    final stationController = TextEditingController(text: _log.stationName ?? '');
+    final odometerController = TextEditingController(
+      text: _log.odometer == null ? '' : _log.odometer!.toStringAsFixed(0),
+    );
+    var isFullTank = _log.isFullTank;
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 18,
-            top: 4,
-          ),
-          child: ListView(
-            shrinkWrap: true,
-            children: [
+        return StatefulBuilder(
+          builder: (context, setSheetState) => Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 18,
+              top: 4,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
               Text(
                 '${_typeTitle(_log.type)} 수정',
                 style: const TextStyle(
@@ -258,6 +281,32 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                   hintText: '기록 메모',
                 ),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: stationController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: '주유소 (선택)',
+                  hintText: '예: OO셀프주유소',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: odometerController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: '현재 주행거리 (선택)',
+                  suffixText: 'km',
+                ),
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: isFullTank,
+                onChanged: (value) => setSheetState(() => isFullTank = value),
+                title: const Text('가득 주유'),
+                subtitle: const Text('추후 실연비 계산에 활용됩니다.'),
+              ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: () async {
@@ -274,6 +323,9 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                   final updated = _buildUpdatedLog(
                     inputs: updatedInputs,
                     memo: memoController.text.trim(),
+                    stationName: stationController.text.trim(),
+                    odometer: double.tryParse(odometerController.text.trim()),
+                    isFullTank: isFullTank,
                   );
                   if (updated == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -282,9 +334,8 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                     return;
                   }
 
-                  await Hive.box<OctaneLog>(
-                    'octane_logs',
-                  ).put(widget.logKey, updated);
+                  if (!await _confirmOdometerIfLower(updated.odometer)) return;
+                  await Hive.box<OctaneLog>('octane_logs').put(widget.logKey, updated);
                   if (!mounted || !context.mounted) return;
                   AnalyticsService.log('record_edited');
                   setState(() {
@@ -296,6 +347,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                 label: const Text('수정 저장'),
               ),
             ],
+            ),
           ),
         );
       },
@@ -305,6 +357,8 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
       controller.dispose();
     }
     memoController.dispose();
+    stationController.dispose();
+    odometerController.dispose();
 
     if (saved == true && mounted) {
       ScaffoldMessenger.of(
@@ -363,6 +417,9 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   OctaneLog? _buildUpdatedLog({
     required Map<String, dynamic> inputs,
     required String memo,
+    required String stationName,
+    required double? odometer,
+    required bool isFullTank,
   }) {
     final result = _recalculateResult(_log.type, inputs);
     if (result == null || result <= 0 || result.isNaN || result.isInfinite) {
@@ -376,6 +433,14 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
         return null;
       }
       normalizedInputs['requiredLiter'] = requiredLiter.toStringAsFixed(1);
+      final currentLiter = double.tryParse(
+        normalizedInputs['currentLiter']?.toString().trim() ?? '',
+      );
+      if (currentLiter != null) {
+        normalizedInputs['expectedTotalLiter'] =
+            (currentLiter + requiredLiter).toStringAsFixed(1);
+      }
+      normalizedInputs['expectedFinalOctane'] = result.toStringAsFixed(2);
     }
 
     return OctaneLog(
@@ -384,7 +449,42 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
       result: result,
       inputs: normalizedInputs,
       memo: memo,
+      stationName: stationName.isEmpty ? null : stationName,
+      odometer: odometer,
+      isFullTank: isFullTank,
     );
+  }
+
+  Future<bool> _confirmOdometerIfLower(double? current) async {
+    if (current == null || current < 0) return true;
+    final box = Hive.box<OctaneLog>('octane_logs');
+    final previous = box.toMap().entries
+        .where((entry) => entry.key != widget.logKey && entry.value.odometer != null)
+        .map((entry) => entry.value)
+        .toList()
+      ..sort((a, b) => b.time.compareTo(a.time));
+    if (previous.isEmpty || current >= previous.first.odometer!) return true;
+    if (!mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('주행거리 확인'),
+            content: Text(
+              '최근 기록은 ${DisplayFormat.groupedInteger(previous.first.odometer!)} km인데 수정 값은 ${DisplayFormat.groupedInteger(current)} km입니다.\n\n계속 저장할까요?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('다시 확인'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('그래도 저장'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   double? _recalculateResult(String type, Map<String, dynamic> inputs) {

@@ -15,6 +15,7 @@ import 'services/analytics_service.dart';
 import 'services/backup_service.dart';
 import 'services/review_prompt_service.dart';
 import 'utils/display_format.dart';
+import 'utils/target_octane_calculator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -198,6 +199,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   final TextEditingController regularPriceCtrl = TextEditingController();
   final TextEditingController regularTotalCostCtrl = TextEditingController();
   final TextEditingController memoCtrl = TextEditingController();
+  final TextEditingController stationCtrl = TextEditingController();
+  final TextEditingController odometerCtrl = TextEditingController();
 
   final TextEditingController carNameCtrl = TextEditingController();
   final TextEditingController carYearCtrl = TextEditingController();
@@ -218,6 +221,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   String? _targetComment;
   bool _targetImpossible = false;
   double? _targetResultOctane;
+  double? _targetTotalLiter;
+  bool _isFullTank = false;
 
   int _currentMainTab = 0;
   int _recordFilter = 0;
@@ -464,6 +469,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     regularPriceCtrl.dispose();
     regularTotalCostCtrl.dispose();
     memoCtrl.dispose();
+    stationCtrl.dispose();
+    odometerCtrl.dispose();
     carNameCtrl.dispose();
     carYearCtrl.dispose();
     carRecCtrl.dispose();
@@ -500,38 +507,27 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return _parseDouble(beforeLiterCtrl) + _parseDouble(addLiterCtrl);
   }
 
-  double? _calcTargetRequiredLiter() {
-    final target = _parseDouble(targetOctaneCtrl);
-    final currentL = _parseDouble(targetCurrentLiterCtrl);
-    final currentO = _parseDouble(targetCurrentOctaneCtrl);
-    final fuelO = _parseDouble(targetFuelOctaneCtrl);
-
-    if (target <= 0 || currentL <= 0 || currentO <= 0 || fuelO <= 0) {
-      return null;
-    }
-
-    if (currentO >= target) {
-      return 0;
-    }
-
-    if (fuelO <= target) {
-      return double.infinity;
-    }
-
-    return ((target - currentO) * currentL) / (fuelO - target);
-  }
+  TargetOctaneCalculation _calculateTarget() => TargetOctaneCalculator.calculate(
+    target: double.tryParse(targetOctaneCtrl.text.trim()),
+    currentLiter: double.tryParse(targetCurrentLiterCtrl.text.trim()),
+    currentOctane: double.tryParse(targetCurrentOctaneCtrl.text.trim()),
+    fuelOctane: double.tryParse(targetFuelOctaneCtrl.text.trim()),
+  );
 
   CarProfile? _mainCar() {
     return Hive.box<CarProfile>('car_profile').get('main');
   }
 
-  Future<void> _saveLog({
+  Future<bool> _saveLog({
     required String type,
     required double result,
     required Map<String, dynamic> inputs,
     String memo = '',
   }) async {
+    if (!await _confirmOdometerIfLower()) return false;
     final box = Hive.box<OctaneLog>('octane_logs');
+    final stationName = stationCtrl.text.trim();
+    final odometer = double.tryParse(odometerCtrl.text.trim());
     await box.add(
       OctaneLog(
         time: DateTime.now(),
@@ -539,6 +535,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         result: result,
         inputs: inputs,
         memo: memo,
+        stationName: stationName.isEmpty ? null : stationName,
+        odometer: odometer,
+        isFullTank: _isFullTank,
       ),
     );
     AnalyticsService.log('save_record', parameters: {'type': type});
@@ -550,6 +549,40 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         'has_memo': memo.trim().isNotEmpty.toString(),
       },
     );
+    return true;
+  }
+
+  Future<bool> _confirmOdometerIfLower() async {
+    final current = double.tryParse(odometerCtrl.text.trim());
+    if (current == null || current < 0) return true;
+
+    final previous = Hive.box<OctaneLog>('octane_logs').values
+        .where((log) => log.odometer != null)
+        .toList()
+      ..sort((a, b) => b.time.compareTo(a.time));
+    if (previous.isEmpty || current >= previous.first.odometer!) return true;
+    if (!mounted) return false;
+
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('주행거리 확인'),
+            content: Text(
+              '최근 기록은 ${DisplayFormat.groupedInteger(previous.first.odometer!)} km인데 현재 입력은 ${DisplayFormat.groupedInteger(current)} km입니다.\n\n계기판 값을 다시 확인한 뒤에도 저장할까요?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('다시 확인'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('그래도 저장'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   String _analyticsCalculationType(String type) {
@@ -680,7 +713,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final value = _avgResult;
     if (value == null || value <= 0) return;
 
-    await _saveLog(
+    final saved = await _saveLog(
       type: 'average',
       result: value,
       inputs: {
@@ -690,6 +723,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       },
       memo: _recordMemo(),
     );
+    if (!saved) return;
     if (!mounted) return;
     setState(() {
       _avgResult = null;
@@ -702,7 +736,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final value = _mixResult;
     if (value == null || value <= 0) return;
 
-    await _saveLog(
+    final saved = await _saveLog(
       type: 'mixed',
       result: value,
       inputs: {
@@ -718,6 +752,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       },
       memo: _recordMemo(),
     );
+    if (!saved) return;
     if (!mounted) return;
     setState(() {
       _mixResult = null;
@@ -736,7 +771,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       return;
     }
 
-    await _saveLog(
+    final saved = await _saveLog(
       type: 'target',
       result: value,
       inputs: {
@@ -745,14 +780,19 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         'currentOctane': targetCurrentOctaneCtrl.text.trim(),
         'fuelOctane': targetFuelOctaneCtrl.text.trim(),
         'requiredLiter': requiredLiter.toStringAsFixed(1),
+        if (_targetTotalLiter != null)
+          'expectedTotalLiter': _targetTotalLiter!.toStringAsFixed(1),
+        'expectedFinalOctane': value.toStringAsFixed(2),
         ..._recordInputs(),
       },
       memo: _recordMemo(),
     );
+    if (!saved) return;
     if (!mounted) return;
     setState(() {
       _targetRequiredLiter = null;
       _targetResultOctane = null;
+      _targetTotalLiter = null;
       _targetComment = null;
       _targetImpossible = false;
     });
@@ -901,41 +941,16 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   void _onCalcTarget() {
-    final requiredLiter = _calcTargetRequiredLiter();
-    final target = _parseDouble(targetOctaneCtrl);
-    final currentOctane = _parseDouble(targetCurrentOctaneCtrl);
-    final fuelOctane = _parseDouble(targetFuelOctaneCtrl);
-
-    if (requiredLiter == null) {
-      setState(() {
-        _targetRequiredLiter = null;
-        _targetResultOctane = null;
-        _targetImpossible = true;
-        _targetComment = '목표 옥탄가, 현재 잔량, 현재 옥탄가, 추가 연료 옥탄가를 입력해 주세요.';
-      });
-      AnalyticsService.log('calculate_target');
-      return;
-    }
-
-    final impossible = requiredLiter.isInfinite;
-    final resultOctane = currentOctane >= target ? currentOctane : target;
-
+    final calculation = _calculateTarget();
     setState(() {
-      _targetRequiredLiter = impossible ? null : requiredLiter;
-      _targetResultOctane = impossible || target <= 0 ? null : resultOctane;
-      _targetImpossible = impossible;
-      if (impossible) {
-        _targetComment =
-            '추가할 연료 옥탄가가 목표 ${target.toStringAsFixed(1)}보다 높아야 도달할 수 있습니다.';
-      } else if (requiredLiter <= 0) {
-        _targetComment = '현재 연료가 이미 목표 옥탄가를 충족합니다.';
-      } else {
-        _targetComment =
-            '${fuelOctane.toStringAsFixed(1)} 옥탄 연료를 ${requiredLiter.toStringAsFixed(1)}L 이상 넣으면 목표 ${target.toStringAsFixed(1)}에 도달합니다.';
-      }
+      _targetRequiredLiter = calculation.requiredLiter;
+      _targetTotalLiter = calculation.totalLiter;
+      _targetResultOctane = calculation.finalOctane;
+      _targetImpossible = !calculation.isPossible;
+      _targetComment = calculation.message;
     });
     AnalyticsService.log('calculate_target');
-    if (!impossible && _targetResultOctane != null) {
+    if (calculation.isPossible && _targetResultOctane != null) {
       _logCalculationCompleted('target');
     }
   }
@@ -1905,7 +1920,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   String _recommendationText() {
     if (_isTargetMode) {
       if (_targetImpossible) {
-        return '목표보다 높은 옥탄가의 연료를 선택해야 도달할 수 있습니다.';
+        return _targetComment ?? '목표 옥탄가에 도달할 수 있는 연료를 선택해 주세요.';
       }
       if (_targetRequiredLiter != null) {
         final fuelOctane = _parseDouble(targetFuelOctaneCtrl);
@@ -2040,13 +2055,22 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     } else {
       _onCalcTarget();
       final requiredLiter = _targetRequiredLiter;
+      final totalLiter = _targetTotalLiter;
+      final finalOctane = _targetResultOctane;
+      final message = [
+        _targetComment ?? '',
+        if (!_targetImpossible && totalLiter != null)
+          '주유 후 예상 총 연료량: ${_formatLiter(totalLiter)}',
+        if (!_targetImpossible && finalOctane != null)
+          '최종 예상 옥탄가: ${_formatRon(finalOctane, detail: true)}',
+      ].join('\n');
       _showCalculationResultPopup(
         title: _targetImpossible ? '목표 도달 불가' : '필요 주유량',
         value:
             _targetImpossible || requiredLiter == null
                 ? '--'
                 : '${requiredLiter.toStringAsFixed(1)} L',
-        message: _targetComment ?? '',
+        message: message,
         onSave:
             _targetImpossible || requiredLiter == null ? null : _saveTargetLog,
       );
@@ -2696,7 +2720,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             ),
           ),
           subtitle: const Text(
-            '단가, 총액, 메모 선택 입력',
+            '단가, 총액, 주유소, 주행거리 선택 입력',
             style: TextStyle(color: Color(0xFF8296AA), fontSize: 12),
           ),
           children: [
@@ -2790,6 +2814,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               const SizedBox(height: 10),
               _compactMemoField(),
             ],
+            const SizedBox(height: 18),
+            _fuelInformationSection(),
           ],
         ),
       ),
@@ -2880,6 +2906,111 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 13),
       ),
     );
+  }
+
+  Widget _fuelInformationSection() {
+    final stations = _recentStationNames();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(color: Color(0xFF1D2B38)),
+        const SizedBox(height: 12),
+        const Text(
+          '주유 정보',
+          style: TextStyle(
+            color: Color(0xFFB8C4D1),
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: stationCtrl,
+          textInputAction: TextInputAction.next,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+          decoration: const InputDecoration(
+            labelText: '주유소 (선택)',
+            hintText: '예: OO셀프주유소',
+            prefixIcon: Icon(Icons.local_gas_station_outlined),
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          ),
+        ),
+        if (stations.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: stations
+                .map(
+                  (name) => ActionChip(
+                    label: Text(name),
+                    avatar: const Icon(Icons.history_rounded, size: 16),
+                    onPressed: () => setState(() => stationCtrl.text = name),
+                    backgroundColor: const Color(0xFF102B3A),
+                    labelStyle: const TextStyle(
+                      color: Color(0xFFB8C4D1),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    side: const BorderSide(color: Color(0xFF1B3852)),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+        const SizedBox(height: 10),
+        TextField(
+          controller: odometerCtrl,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+          decoration: const InputDecoration(
+            labelText: '현재 주행거리 (선택)',
+            hintText: '예: 171420',
+            suffixText: 'km',
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          ),
+        ),
+        const SizedBox(height: 6),
+        SwitchListTile.adaptive(
+          value: _isFullTank,
+          onChanged: (value) => setState(() => _isFullTank = value),
+          contentPadding: EdgeInsets.zero,
+          activeThumbColor: const Color(0xFF00E58A),
+          title: const Text(
+            '가득 주유',
+            style: TextStyle(
+              color: Color(0xFFB8C4D1),
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          subtitle: const Text(
+            '추후 실연비 계산에 활용됩니다.',
+            style: TextStyle(color: Color(0xFF8296AA), fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<String> _recentStationNames() {
+    final names = <String>[];
+    final seen = <String>{};
+    final logs = Hive.box<OctaneLog>('octane_logs').values.toList()
+      ..sort((a, b) => b.time.compareTo(a.time));
+    for (final log in logs) {
+      final name = log.stationName?.trim();
+      if (name == null || name.isEmpty || !seen.add(name.toLowerCase())) {
+        continue;
+      }
+      names.add(name);
+      if (names.length == 5) break;
+    }
+    return names;
   }
 
   double? _diffFromLatestRecord(double value) {
@@ -3057,6 +3188,19 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 ),
               ),
             ),
+            if (!_targetImpossible &&
+                _targetTotalLiter != null &&
+                resultOctane != null) ...[
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: Color(0xFF1D2B38)),
+              const SizedBox(height: 12),
+              _targetSummaryRow('주유 후 예상 총 연료량', _formatLiter(_targetTotalLiter!)),
+              const SizedBox(height: 8),
+              _targetSummaryRow(
+                '최종 예상 옥탄가',
+                _formatRon(resultOctane, detail: true),
+              ),
+            ],
             if (!_targetImpossible && _targetRequiredLiter != null) ...[
               const SizedBox(height: 8),
               _unsavedNotice(),
@@ -3099,6 +3243,31 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _targetSummaryRow(String label, String value) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF8296AA),
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
     );
   }
 
@@ -3359,6 +3528,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 if (query.isEmpty) return true;
                 return _typeTitle(log.type).toLowerCase().contains(query) ||
                     log.memo.toLowerCase().contains(query) ||
+                    (log.stationName?.toLowerCase().contains(query) ?? false) ||
                     _dateOnly(log.time).contains(query) ||
                     log.result.toStringAsFixed(1).contains(query);
               }).toList()
@@ -3426,7 +3596,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                     autofocus: true,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
-                      hintText: '날짜, 방식, 메모, 옥탄가 검색',
+                      hintText: '날짜, 방식, 주유소, 메모, 옥탄가 검색',
                       prefixIcon: Icon(Icons.search_rounded),
                     ),
                   ),
@@ -4019,6 +4189,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       regularPriceCtrl,
       regularTotalCostCtrl,
       memoCtrl,
+      stationCtrl,
+      odometerCtrl,
       carNameCtrl,
       carYearCtrl,
       carRecCtrl,
@@ -4041,6 +4213,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       _targetComment = null;
       _targetImpossible = false;
       _targetResultOctane = null;
+      _targetTotalLiter = null;
+      _isFullTank = false;
       _recordFilter = 0;
       _recordSearchVisible = false;
       _touchedValue = null;
