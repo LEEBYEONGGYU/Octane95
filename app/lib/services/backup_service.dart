@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -25,6 +26,16 @@ class BackupOperationException implements Exception {
 }
 
 enum BackupExportResult { completed, cancelled }
+
+class BackupFileSaveResult {
+  final String fileName;
+  final String displayLocation;
+
+  const BackupFileSaveResult({
+    required this.fileName,
+    required this.displayLocation,
+  });
+}
 
 class BackupDocument {
   final String appVersion;
@@ -106,9 +117,12 @@ class BackupMigrator {
 class BackupService {
   static const String appId = 'premium_fuel_note';
   static const int currentBackupFormatVersion = 1;
-  static const String currentAppVersion = '1.0.2';
+  static const String currentAppVersion = '1.0.3';
   static const String onboardingPreferenceKey = 'onboarding_shown_v1';
   static const int _maximumBackupBytes = 25 * 1024 * 1024;
+  static const MethodChannel _backupStorageChannel = MethodChannel(
+    'com.octane.octane95/backup_storage',
+  );
 
   static Future<BackupDocument> captureCurrentData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -197,11 +211,7 @@ class BackupService {
 
   static Future<BackupExportResult> export(BackupDocument document) async {
     try {
-      final directory = await getTemporaryDirectory();
-      final file = File(
-        '${directory.path}${Platform.pathSeparator}${_fileName()}',
-      );
-      await file.writeAsString(encode(document), flush: true);
+      final file = await _writeTemporaryBackupFile(document);
       final result = await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/json')],
         subject: '고급유 노트 데이터 백업',
@@ -212,6 +222,47 @@ class BackupService {
           : BackupExportResult.completed;
     } catch (_) {
       throw const BackupOperationException('write');
+    }
+  }
+
+  /// Saves through Android's MediaStore rather than writing an absolute public
+  /// path. Android 10+ exposes the result in Downloads/고급유노트 without a
+  /// broad storage permission.
+  static Future<BackupFileSaveResult> saveToDownloads(
+    BackupDocument document,
+  ) async {
+    File? temporaryFile;
+    try {
+      temporaryFile = await _writeTemporaryBackupFile(document);
+      final fileName = _fileName(document.exportedAt);
+      final displayLocation = await _backupStorageChannel.invokeMethod<String>(
+        'saveBackupFileToDownloads',
+        {'sourcePath': temporaryFile.path, 'fileName': fileName},
+      );
+      if (displayLocation == null || displayLocation.trim().isEmpty) {
+        throw const BackupOperationException('external_storage');
+      }
+      return BackupFileSaveResult(
+        fileName: fileName,
+        displayLocation: displayLocation,
+      );
+    } on PlatformException catch (error) {
+      throw BackupOperationException(
+        error.code == 'unsupported_android_version'
+            ? 'unsupported_android_version'
+            : 'external_storage',
+      );
+    } on BackupOperationException {
+      rethrow;
+    } catch (_) {
+      throw const BackupOperationException('external_storage');
+    } finally {
+      final file = temporaryFile;
+      if (file != null) {
+        try {
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+      }
     }
   }
 
@@ -506,11 +557,18 @@ class BackupService {
     );
   }
 
-  static String _fileName() {
-    final now = DateTime.now();
+  static Future<File> _writeTemporaryBackupFile(BackupDocument document) async {
+    final directory = await getTemporaryDirectory();
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}${_fileName(document.exportedAt)}',
+    );
+    return file.writeAsString(encode(document), flush: true);
+  }
+
+  static String _fileName(DateTime time) {
     final date =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    return '고급유노트_백업_${date}_${_compactTime(now)}.json';
+        '${time.year}${time.month.toString().padLeft(2, '0')}${time.day.toString().padLeft(2, '0')}';
+    return 'premium_fuel_note_backup_${date}_${_compactTime(time)}.json';
   }
 
   static String _compactTimestamp(DateTime time) {

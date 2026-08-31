@@ -22,6 +22,7 @@ class HistoryDetailPage extends StatefulWidget {
     'beforeOctane': '기존 연료 옥탄가',
     'addLiter': '추가 주유량 (L)',
     'addOctane': '추가 연료 옥탄가',
+    'mixedFuelRon': '이번 주유 평균 옥탄가',
     'tankCapacity': '탱크 용량 (L)',
     'targetOctane': '목표 옥탄가',
     'currentLiter': '현재 남은 연료량 (L)',
@@ -75,121 +76,124 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
           const SizedBox(width: 8),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _infoCard(
-            title: '계산 정보',
-            children: [
-              _row('계산 방식', _typeTitle(_log.type)),
-              _row(
-                '계산 시각',
-                '${_log.time.year}.${_log.time.month.toString().padLeft(2, '0')}.${_log.time.day.toString().padLeft(2, '0')} '
-                    '${_log.time.hour.toString().padLeft(2, '0')}:${_log.time.minute.toString().padLeft(2, '0')}',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _infoCard(
-            title: '입력값',
-            children:
-                visibleInputs.isEmpty
-                    ? [
-                      const Text(
-                        '저장된 계산 입력값이 없습니다.',
-                        style: TextStyle(color: Color(0xFF97A4B1)),
-                      ),
-                    ]
-                    : visibleInputs.map((entry) {
-                      final label =
-                          HistoryDetailPage.inputLabelMap[entry.key] ??
-                          entry.key;
-                      return _row(
-                        label,
-                        DisplayFormat.inputValue(entry.key, entry.value),
-                      );
-                    }).toList(),
-          ),
-          const SizedBox(height: 12),
-          _infoCard(
-            title: '주유 정보',
-            children: [
-              _row(
-                '주유소',
-                _log.stationName?.trim().isNotEmpty == true
-                    ? _log.stationName!.trim()
-                    : '입력 안 됨',
-              ),
-              _row(
-                '현재 주행거리',
-                _log.odometer == null
-                    ? '입력 안 됨'
-                    : '${DisplayFormat.groupedInteger(_log.odometer!)} km',
-              ),
-              _row('가득 주유', _log.isFullTank ? '예' : '아니오'),
-            ],
-          ),
-          if (_log.memo.trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
             _infoCard(
-              title: '메모',
+              title: '계산 정보',
               children: [
-                Text(
-                  _log.memo,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    height: 1.45,
-                  ),
+                _row('계산 방식', _typeTitle(_log.type)),
+                _row(
+                  '계산 시각',
+                  '${_log.time.year}.${_log.time.month.toString().padLeft(2, '0')}.${_log.time.day.toString().padLeft(2, '0')} '
+                      '${_log.time.hour.toString().padLeft(2, '0')}:${_log.time.minute.toString().padLeft(2, '0')}',
                 ),
               ],
             ),
-          ],
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
+            const SizedBox(height: 12),
+            _infoCard(
+              title: '입력값',
+              children:
+                  visibleInputs.isEmpty
+                      ? [
+                        const Text(
+                          '저장된 계산 입력값이 없습니다.',
+                          style: TextStyle(color: Color(0xFF64748B)),
+                        ),
+                      ]
+                      : visibleInputs.map((entry) {
+                        final label =
+                            HistoryDetailPage.inputLabelMap[entry.key] ??
+                            entry.key;
+                        return _row(
+                          label,
+                          DisplayFormat.inputValue(entry.key, entry.value),
+                        );
+                      }).toList(),
+            ),
+            const SizedBox(height: 12),
+            _infoCard(
+              title: '주유 정보',
+              children: [
+                _row(
+                  '주유소',
+                  _log.stationName?.trim().isNotEmpty == true
+                      ? _log.stationName!.trim()
+                      : '입력 안 됨',
+                ),
+                _row(
+                  '현재 주행거리',
+                  _log.odometer == null
+                      ? '입력 안 됨'
+                      : '${DisplayFormat.groupedInteger(_log.odometer!)} km',
+                ),
+                _row('가득 주유', _log.isFullTank ? '예' : '아니오'),
+              ],
+            ),
+            if (_log.memo.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _infoCard(
+                title: '메모',
                 children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      DisplayFormat.ron(_log.result, detail: true),
-                      style: const TextStyle(
-                        fontSize: 42,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: status.color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      status.label,
-                      style: TextStyle(
-                        color: status.color,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   Text(
-                    status.message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 15),
+                    _log.memo,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      height: 1.45,
+                    ),
                   ),
                 ],
               ),
+            ],
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        DisplayFormat.ron(_log.result, detail: true),
+                        style: const TextStyle(
+                          fontSize: 42,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: status.color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        status.label,
+                        style: TextStyle(
+                          color: status.color,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      status.message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -86,6 +86,7 @@ class DisplayFormat {
     'currentOctane',
     'fuelOctane',
     'expectedFinalOctane',
+    'mixedFuelRon',
   };
 
   static const _odometerKeys = {'odometer'};
