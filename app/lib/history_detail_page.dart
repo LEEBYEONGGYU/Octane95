@@ -16,6 +16,8 @@ class HistoryDetailPage extends StatefulWidget {
   static const Map<String, String> inputLabelMap = {
     'highLiter': '고급유 주유량 (L)',
     'regularLiter': '일반유 주유량 (L)',
+    'highOctane': '고급유 옥탄가',
+    'regularOctane': '일반유 옥탄가',
     'beforeLiter': '기존 연료량 (L)',
     'beforeOctane': '기존 연료 옥탄가',
     'addLiter': '추가 주유량 (L)',
@@ -112,7 +114,12 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
           _infoCard(
             title: '주유 정보',
             children: [
-              _row('주유소', _log.stationName?.trim().isNotEmpty == true ? _log.stationName!.trim() : '입력 안 됨'),
+              _row(
+                '주유소',
+                _log.stationName?.trim().isNotEmpty == true
+                    ? _log.stationName!.trim()
+                    : '입력 안 됨',
+              ),
               _row(
                 '현재 주행거리',
                 _log.odometer == null
@@ -224,10 +231,20 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     final inputKeys = _editableInputKeys(_log.type);
     final controllers = {
       for (final key in inputKeys)
-        key: TextEditingController(text: _log.inputs[key]?.toString() ?? ''),
+        key: TextEditingController(
+          text:
+              _log.inputs[key]?.toString() ??
+              (key == 'highOctane'
+                  ? '97'
+                  : key == 'regularOctane'
+                  ? '92'
+                  : ''),
+        ),
     };
     final memoController = TextEditingController(text: _log.memo);
-    final stationController = TextEditingController(text: _log.stationName ?? '');
+    final stationController = TextEditingController(
+      text: _log.stationName ?? '',
+    );
     final odometerController = TextEditingController(
       text: _log.odometer == null ? '' : _log.odometer!.toStringAsFixed(0),
     );
@@ -239,116 +256,128 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
       showDragHandle: true,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setSheetState) => Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 18,
-              top: 4,
-            ),
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-              Text(
-                '${_typeTitle(_log.type)} 수정',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
+          builder:
+              (context, setSheetState) => Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 18,
+                  top: 4,
                 ),
-              ),
-              const SizedBox(height: 12),
-              ...inputKeys.map((key) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextField(
-                    controller: controllers[key],
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Text(
+                      '${_typeTitle(_log.type)} 수정',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                    decoration: InputDecoration(
-                      labelText: HistoryDetailPage.inputLabelMap[key] ?? key,
+                    const SizedBox(height: 12),
+                    ...inputKeys.map((key) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextField(
+                          controller: controllers[key],
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText:
+                                HistoryDetailPage.inputLabelMap[key] ?? key,
+                          ),
+                        ),
+                      );
+                    }),
+                    TextField(
+                      controller: memoController,
+                      minLines: 2,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.newline,
+                      decoration: const InputDecoration(
+                        labelText: '메모',
+                        hintText: '기록 메모',
+                      ),
                     ),
-                  ),
-                );
-              }),
-              TextField(
-                controller: memoController,
-                minLines: 2,
-                maxLines: 4,
-                textInputAction: TextInputAction.newline,
-                decoration: const InputDecoration(
-                  labelText: '메모',
-                  hintText: '기록 메모',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: stationController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: '주유소 (선택)',
-                  hintText: '예: OO셀프주유소',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: odometerController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: '현재 주행거리 (선택)',
-                  suffixText: 'km',
-                ),
-              ),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                value: isFullTank,
-                onChanged: (value) => setSheetState(() => isFullTank = value),
-                title: const Text('가득 주유'),
-                subtitle: const Text('추후 실연비 계산에 활용됩니다.'),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final updatedInputs = Map<String, dynamic>.from(_log.inputs);
-                  for (final key in inputKeys) {
-                    final text = controllers[key]!.text.trim();
-                    if (text.isEmpty && _optionalInputKeys.contains(key)) {
-                      updatedInputs.remove(key);
-                    } else {
-                      updatedInputs[key] = text;
-                    }
-                  }
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: stationController,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: '주유소 (선택)',
+                        hintText: '예: OO셀프주유소',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: odometerController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: '현재 주행거리 (선택)',
+                        suffixText: 'km',
+                      ),
+                    ),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: isFullTank,
+                      onChanged:
+                          (value) => setSheetState(() => isFullTank = value),
+                      title: const Text('가득 주유'),
+                      subtitle: const Text('추후 실연비 계산에 활용됩니다.'),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final updatedInputs = Map<String, dynamic>.from(
+                          _log.inputs,
+                        );
+                        for (final key in inputKeys) {
+                          final text = controllers[key]!.text.trim();
+                          if (text.isEmpty &&
+                              _optionalInputKeys.contains(key)) {
+                            updatedInputs.remove(key);
+                          } else {
+                            updatedInputs[key] = text;
+                          }
+                        }
 
-                  final updated = _buildUpdatedLog(
-                    inputs: updatedInputs,
-                    memo: memoController.text.trim(),
-                    stationName: stationController.text.trim(),
-                    odometer: double.tryParse(odometerController.text.trim()),
-                    isFullTank: isFullTank,
-                  );
-                  if (updated == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('입력값을 확인해 주세요.')),
-                    );
-                    return;
-                  }
+                        final updated = _buildUpdatedLog(
+                          inputs: updatedInputs,
+                          memo: memoController.text.trim(),
+                          stationName: stationController.text.trim(),
+                          odometer: double.tryParse(
+                            odometerController.text.trim(),
+                          ),
+                          isFullTank: isFullTank,
+                        );
+                        if (updated == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('입력값을 확인해 주세요.')),
+                          );
+                          return;
+                        }
 
-                  if (!await _confirmOdometerIfLower(updated.odometer)) return;
-                  await Hive.box<OctaneLog>('octane_logs').put(widget.logKey, updated);
-                  if (!mounted || !context.mounted) return;
-                  AnalyticsService.log('record_edited');
-                  setState(() {
-                    _log = updated;
-                  });
-                  Navigator.pop(context, true);
-                },
-                icon: const Icon(Icons.save_rounded),
-                label: const Text('수정 저장'),
+                        if (!await _confirmOdometerIfLower(updated.odometer)) {
+                          return;
+                        }
+                        await Hive.box<OctaneLog>(
+                          'octane_logs',
+                        ).put(widget.logKey, updated);
+                        if (!mounted || !context.mounted) return;
+                        AnalyticsService.log('record_edited');
+                        setState(() {
+                          _log = updated;
+                        });
+                        Navigator.pop(context, true);
+                      },
+                      icon: const Icon(Icons.save_rounded),
+                      label: const Text('수정 저장'),
+                    ),
+                  ],
+                ),
               ),
-            ],
-            ),
-          ),
         );
       },
     );
@@ -372,6 +401,8 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
       'average' => [
         'highLiter',
         'regularLiter',
+        'highOctane',
+        'regularOctane',
         'highUnitPrice',
         'highTotalCost',
         'regularUnitPrice',
@@ -437,8 +468,8 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
         normalizedInputs['currentLiter']?.toString().trim() ?? '',
       );
       if (currentLiter != null) {
-        normalizedInputs['expectedTotalLiter'] =
-            (currentLiter + requiredLiter).toStringAsFixed(1);
+        normalizedInputs['expectedTotalLiter'] = (currentLiter + requiredLiter)
+            .toStringAsFixed(1);
       }
       normalizedInputs['expectedFinalOctane'] = result.toStringAsFixed(2);
     }
@@ -458,31 +489,38 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   Future<bool> _confirmOdometerIfLower(double? current) async {
     if (current == null || current < 0) return true;
     final box = Hive.box<OctaneLog>('octane_logs');
-    final previous = box.toMap().entries
-        .where((entry) => entry.key != widget.logKey && entry.value.odometer != null)
-        .map((entry) => entry.value)
-        .toList()
-      ..sort((a, b) => b.time.compareTo(a.time));
+    final previous =
+        box
+            .toMap()
+            .entries
+            .where(
+              (entry) =>
+                  entry.key != widget.logKey && entry.value.odometer != null,
+            )
+            .map((entry) => entry.value)
+            .toList()
+          ..sort((a, b) => b.time.compareTo(a.time));
     if (previous.isEmpty || current >= previous.first.odometer!) return true;
     if (!mounted) return false;
     return await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('주행거리 확인'),
-            content: Text(
-              '최근 기록은 ${DisplayFormat.groupedInteger(previous.first.odometer!)} km인데 수정 값은 ${DisplayFormat.groupedInteger(current)} km입니다.\n\n계속 저장할까요?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('다시 확인'),
+          builder:
+              (context) => AlertDialog(
+                title: const Text('주행거리 확인'),
+                content: Text(
+                  '최근 기록은 ${DisplayFormat.groupedInteger(previous.first.odometer!)} km인데 수정 값은 ${DisplayFormat.groupedInteger(current)} km입니다.\n\n계속 저장할까요?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('다시 확인'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('그래도 저장'),
+                  ),
+                ],
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('그래도 저장'),
-              ),
-            ],
-          ),
         ) ??
         false;
   }
@@ -495,10 +533,12 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     if (type == 'average') {
       final high = value('highLiter');
       final regular = value('regularLiter');
+      final highOctane = value('highOctane') ?? 97;
+      final regularOctane = value('regularOctane') ?? 92;
       if (high == null || regular == null) return null;
       final total = high + regular;
       if (total <= 0) return null;
-      return ((high * 97) + (regular * 92)) / total;
+      return ((high * highOctane) + (regular * regularOctane)) / total;
     }
 
     if (type == 'mixed') {

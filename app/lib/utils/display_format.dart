@@ -80,6 +80,8 @@ class DisplayFormat {
   static const _octaneKeys = {
     'beforeOctane',
     'addOctane',
+    'highOctane',
+    'regularOctane',
     'targetOctane',
     'currentOctane',
     'fuelOctane',

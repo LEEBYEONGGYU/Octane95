@@ -180,6 +180,12 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
   final TextEditingController highFuelCtrl = TextEditingController();
   final TextEditingController regFuelCtrl = TextEditingController();
+  final TextEditingController highOctaneCtrl = TextEditingController(
+    text: '97',
+  );
+  final TextEditingController regularOctaneCtrl = TextEditingController(
+    text: '92',
+  );
 
   final TextEditingController beforeLiterCtrl = TextEditingController();
   final TextEditingController beforeOctaneCtrl = TextEditingController();
@@ -453,6 +459,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     _tabController.dispose();
     highFuelCtrl.dispose();
     regFuelCtrl.dispose();
+    highOctaneCtrl.dispose();
+    regularOctaneCtrl.dispose();
     beforeLiterCtrl.dispose();
     beforeOctaneCtrl.dispose();
     addLiterCtrl.dispose();
@@ -488,9 +496,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   double _calcAverageOctane() {
     final high = _parseDouble(highFuelCtrl);
     final reg = _parseDouble(regFuelCtrl);
+    final highOctane = _parseDouble(highOctaneCtrl);
+    final regularOctane = _parseDouble(regularOctaneCtrl);
     final total = high + reg;
-    if (total <= 0) return 0;
-    return ((high * 97) + (reg * 92)) / total;
+    if (total <= 0 || highOctane <= 0 || regularOctane <= 0) return 0;
+    return ((high * highOctane) + (reg * regularOctane)) / total;
   }
 
   double _calcMixedOctane() {
@@ -507,12 +517,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return _parseDouble(beforeLiterCtrl) + _parseDouble(addLiterCtrl);
   }
 
-  TargetOctaneCalculation _calculateTarget() => TargetOctaneCalculator.calculate(
-    target: double.tryParse(targetOctaneCtrl.text.trim()),
-    currentLiter: double.tryParse(targetCurrentLiterCtrl.text.trim()),
-    currentOctane: double.tryParse(targetCurrentOctaneCtrl.text.trim()),
-    fuelOctane: double.tryParse(targetFuelOctaneCtrl.text.trim()),
-  );
+  TargetOctaneCalculation _calculateTarget() =>
+      TargetOctaneCalculator.calculate(
+        target: double.tryParse(targetOctaneCtrl.text.trim()),
+        currentLiter: double.tryParse(targetCurrentLiterCtrl.text.trim()),
+        currentOctane: double.tryParse(targetCurrentOctaneCtrl.text.trim()),
+        fuelOctane: double.tryParse(targetFuelOctaneCtrl.text.trim()),
+      );
 
   CarProfile? _mainCar() {
     return Hive.box<CarProfile>('car_profile').get('main');
@@ -522,12 +533,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     required String type,
     required double result,
     required Map<String, dynamic> inputs,
-    String memo = '',
+    required String memo,
+    required String? stationName,
+    required double? odometer,
+    required bool isFullTank,
   }) async {
-    if (!await _confirmOdometerIfLower()) return false;
+    if (!await _confirmOdometerIfLower(odometer)) return false;
     final box = Hive.box<OctaneLog>('octane_logs');
-    final stationName = stationCtrl.text.trim();
-    final odometer = double.tryParse(odometerCtrl.text.trim());
     await box.add(
       OctaneLog(
         time: DateTime.now(),
@@ -535,9 +547,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         result: result,
         inputs: inputs,
         memo: memo,
-        stationName: stationName.isEmpty ? null : stationName,
+        stationName: stationName,
         odometer: odometer,
-        isFullTank: _isFullTank,
+        isFullTank: isFullTank,
       ),
     );
     AnalyticsService.log('save_record', parameters: {'type': type});
@@ -552,35 +564,36 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return true;
   }
 
-  Future<bool> _confirmOdometerIfLower() async {
-    final current = double.tryParse(odometerCtrl.text.trim());
+  Future<bool> _confirmOdometerIfLower(double? current) async {
     if (current == null || current < 0) return true;
 
-    final previous = Hive.box<OctaneLog>('octane_logs').values
-        .where((log) => log.odometer != null)
-        .toList()
-      ..sort((a, b) => b.time.compareTo(a.time));
+    final previous =
+        Hive.box<OctaneLog>(
+            'octane_logs',
+          ).values.where((log) => log.odometer != null).toList()
+          ..sort((a, b) => b.time.compareTo(a.time));
     if (previous.isEmpty || current >= previous.first.odometer!) return true;
     if (!mounted) return false;
 
     return await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('주행거리 확인'),
-            content: Text(
-              '최근 기록은 ${DisplayFormat.groupedInteger(previous.first.odometer!)} km인데 현재 입력은 ${DisplayFormat.groupedInteger(current)} km입니다.\n\n계기판 값을 다시 확인한 뒤에도 저장할까요?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('다시 확인'),
+          builder:
+              (context) => AlertDialog(
+                title: const Text('주행거리 확인'),
+                content: Text(
+                  '최근 기록은 ${DisplayFormat.groupedInteger(previous.first.odometer!)} km인데 현재 입력은 ${DisplayFormat.groupedInteger(current)} km입니다.\n\n계기판 값을 다시 확인한 뒤에도 저장할까요?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('다시 확인'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('그래도 저장'),
+                  ),
+                ],
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('그래도 저장'),
-              ),
-            ],
-          ),
         ) ??
         false;
   }
@@ -713,30 +726,24 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final value = _avgResult;
     if (value == null || value <= 0) return;
 
-    final saved = await _saveLog(
+    await _showRecordSaveSheet(
       type: 'average',
       result: value,
       inputs: {
         'highLiter': highFuelCtrl.text.trim(),
         'regularLiter': regFuelCtrl.text.trim(),
-        ..._recordInputs(),
+        'highOctane': highOctaneCtrl.text.trim(),
+        'regularOctane': regularOctaneCtrl.text.trim(),
       },
-      memo: _recordMemo(),
+      fuelLiter: _parseDouble(highFuelCtrl) + _parseDouble(regFuelCtrl),
     );
-    if (!saved) return;
-    if (!mounted) return;
-    setState(() {
-      _avgResult = null;
-      _avgComment = null;
-    });
-    _showSavedSnackBar();
   }
 
   Future<void> _saveMixedLog() async {
     final value = _mixResult;
     if (value == null || value <= 0) return;
 
-    final saved = await _saveLog(
+    await _showRecordSaveSheet(
       type: 'mixed',
       result: value,
       inputs: {
@@ -748,17 +755,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           'tankCapacity': mixTankCtrl.text.trim()
         else if (_mainCar()?.tankCapacity != null)
           'tankCapacity': _mainCar()!.tankCapacity!.toStringAsFixed(1),
-        ..._recordInputs(),
       },
-      memo: _recordMemo(),
+      fuelLiter: _parseDouble(addLiterCtrl),
     );
-    if (!saved) return;
-    if (!mounted) return;
-    setState(() {
-      _mixResult = null;
-      _mixComment = null;
-    });
-    _showSavedSnackBar();
   }
 
   Future<void> _saveTargetLog() async {
@@ -771,7 +770,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       return;
     }
 
-    final saved = await _saveLog(
+    await _showRecordSaveSheet(
       type: 'target',
       result: value,
       inputs: {
@@ -783,20 +782,392 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         if (_targetTotalLiter != null)
           'expectedTotalLiter': _targetTotalLiter!.toStringAsFixed(1),
         'expectedFinalOctane': value.toStringAsFixed(2),
-        ..._recordInputs(),
       },
-      memo: _recordMemo(),
+      fuelLiter: requiredLiter,
     );
-    if (!saved) return;
-    if (!mounted) return;
+  }
+
+  Future<void> _showRecordSaveSheet({
+    required String type,
+    required double result,
+    required Map<String, dynamic> inputs,
+    required double fuelLiter,
+  }) async {
+    final stationController = TextEditingController();
+    final odometerController = TextEditingController();
+    final totalCostController = TextEditingController();
+    final fuelLiterController = TextEditingController(
+      text: fuelLiter > 0 ? fuelLiter.toStringAsFixed(1) : '',
+    );
+    final unitPriceController = TextEditingController();
+    final memoController = TextEditingController();
+    var isFullTank = false;
+    var showCostDetails = false;
+    var changingCost = false;
+
+    void updateUnitPrice() {
+      if (changingCost) return;
+      final total = DisplayFormat.asDouble(totalCostController.text);
+      final liter = DisplayFormat.asDouble(fuelLiterController.text);
+      if (total == null || liter == null || total <= 0 || liter <= 0) return;
+      changingCost = true;
+      unitPriceController.text = (total / liter).toStringAsFixed(0);
+      changingCost = false;
+    }
+
+    void updateTotalCost() {
+      if (changingCost) return;
+      final liter = DisplayFormat.asDouble(fuelLiterController.text);
+      final unit = DisplayFormat.asDouble(unitPriceController.text);
+      if (liter == null || unit == null || liter <= 0 || unit <= 0) return;
+      changingCost = true;
+      totalCostController.text = (liter * unit).toStringAsFixed(0);
+      changingCost = false;
+    }
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF0D2033),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final stations = _recentStationNames();
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  4,
+                  20,
+                  MediaQuery.of(context).viewInsets.bottom + 18,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * .86,
+                  ),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      const Text(
+                        '주유 기록 저장',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      const Text(
+                        '계산 결과와 함께 추가 주유 정보를 저장합니다.',
+                        style: TextStyle(
+                          color: Color(0xFFB8C4D1),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      _sheetSectionTitle(
+                        '기본 주유 정보',
+                        Icons.local_gas_station_rounded,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: stationController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: '주유소 (선택)',
+                          hintText: '예: SK 판교주유소',
+                          prefixIcon: Icon(Icons.local_gas_station_outlined),
+                        ),
+                      ),
+                      if (stations.isNotEmpty) ...[
+                        const SizedBox(height: 9),
+                        const Text(
+                          '최근 주유소',
+                          style: TextStyle(
+                            color: Color(0xFF8296AA),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          children:
+                              stations
+                                  .map(
+                                    (name) => ActionChip(
+                                      label: Text(name),
+                                      onPressed:
+                                          () => setSheetState(
+                                            () => stationController.text = name,
+                                          ),
+                                      backgroundColor: const Color(0xFF102B3A),
+                                      labelStyle: const TextStyle(
+                                        color: Color(0xFFB8C4D1),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                      side: const BorderSide(
+                                        color: Color(0xFF1B3852),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: odometerController,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.next,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: '현재 주행거리 (선택)',
+                          hintText: '예: 172420',
+                          suffixText: 'km',
+                        ),
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        value: isFullTank,
+                        activeThumbColor: const Color(0xFF00E58A),
+                        onChanged:
+                            (value) => setSheetState(() => isFullTank = value),
+                        title: const Text(
+                          '가득 주유',
+                          style: TextStyle(
+                            color: Color(0xFFB8C4D1),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          '추후 실연비 계산에 활용됩니다.',
+                          style: TextStyle(
+                            color: Color(0xFF8296AA),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Theme(
+                        data: Theme.of(
+                          context,
+                        ).copyWith(dividerColor: Colors.transparent),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF091A2A),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF1B3852)),
+                          ),
+                          child: ExpansionTile(
+                            onExpansionChanged:
+                                (value) => setSheetState(
+                                  () => showCostDetails = value,
+                                ),
+                            leading: const Icon(
+                              Icons.receipt_long_outlined,
+                              color: Color(0xFF00E58A),
+                            ),
+                            title: const Text(
+                              '추가 금액 정보 (선택)',
+                              style: TextStyle(
+                                color: Color(0xFFB8C4D1),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            subtitle: Text(
+                              showCostDetails
+                                  ? '총액과 주유량으로 단가를 자동 계산합니다.'
+                                  : '필요할 때만 입력해 주세요.',
+                              style: const TextStyle(
+                                color: Color(0xFF8296AA),
+                                fontSize: 12,
+                              ),
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(
+                              12,
+                              0,
+                              12,
+                              12,
+                            ),
+                            children: [
+                              _sheetNumberField(
+                                totalCostController,
+                                '총 주유 금액',
+                                unit: '원',
+                                onChanged: (_) {
+                                  updateUnitPrice();
+                                  setSheetState(() {});
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              _sheetNumberField(
+                                fuelLiterController,
+                                '주유량',
+                                unit: 'L',
+                                onChanged: (_) {
+                                  updateUnitPrice();
+                                  setSheetState(() {});
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              _sheetNumberField(
+                                unitPriceController,
+                                '리터당 단가',
+                                unit: '원/L',
+                                onChanged: (_) {
+                                  updateTotalCost();
+                                  setSheetState(() {});
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        '메모 (선택)',
+                        style: TextStyle(
+                          color: Color(0xFFB8C4D1),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: memoController,
+                        minLines: 2,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.newline,
+                        decoration: const InputDecoration(
+                          hintText: '메모를 입력하세요.',
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('취소'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                final recordInputs = Map<String, dynamic>.from(
+                                  inputs,
+                                );
+                                final totalCost = DisplayFormat.asDouble(
+                                  totalCostController.text,
+                                );
+                                final unitPrice = DisplayFormat.asDouble(
+                                  unitPriceController.text,
+                                );
+                                if (totalCost != null && totalCost > 0) {
+                                  recordInputs['totalCost'] = totalCost
+                                      .toStringAsFixed(0);
+                                }
+                                if (unitPrice != null && unitPrice > 0) {
+                                  recordInputs['unitPrice'] = unitPrice
+                                      .toStringAsFixed(0);
+                                }
+                                final saved = await _saveLog(
+                                  type: type,
+                                  result: result,
+                                  inputs: recordInputs,
+                                  memo: memoController.text.trim(),
+                                  stationName:
+                                      stationController.text.trim().isEmpty
+                                          ? null
+                                          : stationController.text.trim(),
+                                  odometer: double.tryParse(
+                                    odometerController.text.trim(),
+                                  ),
+                                  isFullTank: isFullTank,
+                                );
+                                if (saved && context.mounted) {
+                                  Navigator.pop(context, true);
+                                }
+                              },
+                              child: const Text('저장하기'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    stationController.dispose();
+    odometerController.dispose();
+    totalCostController.dispose();
+    fuelLiterController.dispose();
+    unitPriceController.dispose();
+    memoController.dispose();
+
+    if (saved != true || !mounted) return;
     setState(() {
-      _targetRequiredLiter = null;
-      _targetResultOctane = null;
-      _targetTotalLiter = null;
-      _targetComment = null;
-      _targetImpossible = false;
+      if (type == 'average') {
+        _avgResult = null;
+        _avgComment = null;
+      } else if (type == 'mixed') {
+        _mixResult = null;
+        _mixComment = null;
+      } else {
+        _targetRequiredLiter = null;
+        _targetResultOctane = null;
+        _targetTotalLiter = null;
+        _targetComment = null;
+        _targetImpossible = false;
+      }
     });
     _showSavedSnackBar();
+  }
+
+  Widget _sheetSectionTitle(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: const Color(0xFF00E58A), size: 20),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFFB8C4D1),
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sheetNumberField(
+    TextEditingController controller,
+    String label, {
+    required String unit,
+    required ValueChanged<String> onChanged,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textInputAction: TextInputAction.next,
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+      onChanged: onChanged,
+      decoration: InputDecoration(labelText: label, suffixText: unit),
+    );
   }
 
   void _showSavedSnackBar() {
@@ -2030,114 +2401,264 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   void _runCurrentCalculation() {
+    FocusScope.of(context).unfocus();
     if (_isAverageMode) {
       _onCalcAverage();
-      final value = _avgResult;
-      if (value != null && value > 0) {
-        _showCalculationResultPopup(
-          title: '평균 옥탄가',
-          value: value.toStringAsFixed(2),
-          message: _avgComment ?? '',
-          onSave: _saveAverageLog,
-        );
-      }
     } else if (_isMixedMode) {
       _onCalcMixed();
-      final value = _mixResult;
-      if (value != null && value > 0) {
-        _showCalculationResultPopup(
-          title: '최종 옥탄가',
-          value: value.toStringAsFixed(2),
-          message: _mixComment ?? '',
-          onSave: _saveMixedLog,
-        );
-      }
     } else {
       _onCalcTarget();
-      final requiredLiter = _targetRequiredLiter;
-      final totalLiter = _targetTotalLiter;
-      final finalOctane = _targetResultOctane;
-      final message = [
-        _targetComment ?? '',
-        if (!_targetImpossible && totalLiter != null)
-          '주유 후 예상 총 연료량: ${_formatLiter(totalLiter)}',
-        if (!_targetImpossible && finalOctane != null)
-          '최종 예상 옥탄가: ${_formatRon(finalOctane, detail: true)}',
-      ].join('\n');
-      _showCalculationResultPopup(
-        title: _targetImpossible ? '목표 도달 불가' : '필요 주유량',
-        value:
-            _targetImpossible || requiredLiter == null
-                ? '--'
-                : '${requiredLiter.toStringAsFixed(1)} L',
-        message: message,
-        onSave:
-            _targetImpossible || requiredLiter == null ? null : _saveTargetLog,
-      );
     }
   }
 
-  Future<void> _showCalculationResultPopup({
-    required String title,
-    required String value,
-    required String message,
-    VoidCallback? onSave,
-  }) async {
-    FocusScope.of(context).unfocus();
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-      await Future<void>.delayed(const Duration(milliseconds: 180));
+  Widget _inlineCalculationResult() {
+    if (_isTargetMode && _targetImpossible) {
+      return _targetErrorStateCard(_targetComment ?? '입력 값을 다시 확인해 주세요.');
     }
-    if (!mounted) return;
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          icon: const Icon(
-            Icons.calculate_rounded,
-            color: Color(0xFF00E58A),
-            size: 34,
-          ),
-          title: Text(title, textAlign: TextAlign.center),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 42,
-                  height: 1,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFB7C7D8), height: 1.4),
-              ),
+    final value =
+        _isAverageMode
+            ? _avgResult
+            : _isMixedMode
+            ? _mixResult
+            : _targetResultOctane;
+    if (value == null || value <= 0) {
+      return _calculationStateCard(
+        color: const Color(0xFF35A7E8),
+        icon: Icons.info_outline_rounded,
+        title: '입력 값을 다시 확인해 주세요.',
+        message: '모든 값은 0보다 커야 합니다. 옥탄가는 일반적으로 80~110 범위에서 입력합니다.',
+      );
+    }
+
+    final save =
+        _isAverageMode
+            ? _saveAverageLog
+            : _isMixedMode
+            ? _saveMixedLog
+            : _saveTargetLog;
+    final resultLabel = _isTargetMode ? '필요 주유량' : '최종 예상 옥탄가';
+    final resultValue =
+        _isTargetMode
+            ? _formatLiter(_targetRequiredLiter ?? 0)
+            : _formatRon(value, detail: true);
+
+    return Column(
+      children: [
+        _calculationStateCard(
+          color: const Color(0xFF00E58A),
+          icon: Icons.check_circle_outline_rounded,
+          title: '계산이 완료되었습니다.',
+          message: '아래 결과를 확인하세요.',
+        ),
+        const SizedBox(height: 10),
+        _calculationGroupCard(
+          title: '계산 결과',
+          icon: Icons.bar_chart_rounded,
+          children: [
+            _resultMetric(resultLabel, resultValue),
+            if (_isTargetMode) ...[
+              const Divider(color: Color(0xFF1D2B38), height: 22),
+              _resultMetric('주유 후 총 연료량', _formatLiter(_targetTotalLiter ?? 0)),
+              const Divider(color: Color(0xFF1D2B38), height: 22),
+              _resultMetric('최종 예상 옥탄가', _formatRon(value, detail: true)),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('닫기'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _calculationGroupCard(
+          title: '계산 조건 요약',
+          icon: Icons.fact_check_outlined,
+          children: _calculationSummaryRows(),
+        ),
+        const SizedBox(height: 10),
+        _unsavedNotice(),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _clearCurrentResult,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('다시 계산'),
+              ),
             ),
-            if (onSave != null)
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  onSave();
-                },
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: save,
                 icon: const Icon(Icons.save_rounded),
                 label: const Text('기록 저장'),
               ),
+            ),
           ],
-        );
-      },
+        ),
+      ],
     );
+  }
+
+  Widget _targetErrorStateCard(String message) {
+    final isLowerFuel = message.contains('현재 연료보다 높아야');
+    final isInvalid = message.contains('0보다 큰 숫자');
+    final color =
+        isInvalid
+            ? const Color(0xFF35A7E8)
+            : isLowerFuel
+            ? const Color(0xFFFFB547)
+            : const Color(0xFFFF5B64);
+    final title =
+        isInvalid
+            ? '입력 값을 다시 확인해 주세요.'
+            : isLowerFuel
+            ? '현재 연료보다 낮거나 같은 옥탄가입니다.'
+            : '목표 달성이 불가능한 조건입니다.';
+    final detail =
+        isInvalid
+            ? '모든 값은 0보다 커야 합니다. 옥탄가는 일반적으로 80~110 범위입니다.'
+            : isLowerFuel
+            ? '$message\n\n주입할 연료의 옥탄가가 현재 연료와 같거나 낮으면 목표 옥탄가를 높일 수 없습니다.'
+            : '$message\n\n더 높은 옥탄가의 연료를 선택하거나 목표 값을 조정해 주세요.';
+    return _calculationStateCard(
+      color: color,
+      icon:
+          isInvalid ? Icons.info_outline_rounded : Icons.warning_amber_rounded,
+      title: title,
+      message: detail,
+    );
+  }
+
+  Widget _calculationStateCard({
+    required Color color,
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: .55)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 25),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: Color(0xFFB8C4D1),
+                    fontSize: 13,
+                    height: 1.4,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _resultMetric(String label, String value) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF8296AA),
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _calculationSummaryRows() {
+    if (_isTargetMode) {
+      return [
+        _targetSummaryRow('목표 옥탄가', '${targetOctaneCtrl.text.trim()} RON'),
+        const SizedBox(height: 8),
+        _targetSummaryRow(
+          '현재 잔여 연료',
+          '${targetCurrentLiterCtrl.text.trim()} L (${targetCurrentOctaneCtrl.text.trim()} RON)',
+        ),
+        const SizedBox(height: 8),
+        _targetSummaryRow(
+          '주입 연료 옥탄가',
+          '${targetFuelOctaneCtrl.text.trim()} RON',
+        ),
+      ];
+    }
+    if (_isMixedMode) {
+      return [
+        _targetSummaryRow(
+          '현재 탱크 상태',
+          '${beforeLiterCtrl.text.trim()} L · ${beforeOctaneCtrl.text.trim()} RON',
+        ),
+        const SizedBox(height: 8),
+        _targetSummaryRow(
+          '이번 주유',
+          '${addLiterCtrl.text.trim()} L · ${addOctaneCtrl.text.trim()} RON',
+        ),
+      ];
+    }
+    return [
+      _targetSummaryRow(
+        '고급유',
+        '${highFuelCtrl.text.trim()} L · ${highOctaneCtrl.text.trim()} RON',
+      ),
+      const SizedBox(height: 8),
+      _targetSummaryRow(
+        '일반유',
+        '${regFuelCtrl.text.trim()} L · ${regularOctaneCtrl.text.trim()} RON',
+      ),
+    ];
+  }
+
+  void _clearCurrentResult() {
+    setState(() {
+      if (_isAverageMode) {
+        _avgResult = null;
+        _avgComment = null;
+      } else if (_isMixedMode) {
+        _mixResult = null;
+        _mixComment = null;
+      } else {
+        _targetRequiredLiter = null;
+        _targetTotalLiter = null;
+        _targetResultOctane = null;
+        _targetComment = null;
+        _targetImpossible = false;
+      }
+    });
   }
 
   double _currentOctaneValue() {
@@ -2412,65 +2933,20 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   Widget _inputInfoCard() {
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: const Color(0xFF0D2033),
-      shadowColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: Color(0xFF1B3852)),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          key: ValueKey('input_${_shouldExpandInput}_${_calcMode}'),
-          initiallyExpanded: _shouldExpandInput,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          leading: const Icon(Icons.tune_rounded, color: Color(0xFF00E58A)),
-          title: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  '입력 정보',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-                ),
-              ),
-              InkWell(
-                onTap: _showInputHelp,
-                borderRadius: BorderRadius.circular(999),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.help_outline_rounded,
-                    color: const Color(0xFF8296AA),
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          subtitle: Text(
-            _shouldExpandInput ? '계산 방식을 선택하고 값을 입력' : '값을 수정하려면 펼쳐서 다시 계산',
-            style: TextStyle(
-              color: const Color(0xFF8296AA),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          children: [
-            _modeSelector(),
-            const SizedBox(height: 10),
-            _modeDescriptionCard(),
-            const SizedBox(height: 14),
-            ..._calculationFields(),
-            const SizedBox(height: 14),
-            _optionalRecordCard(),
-            const SizedBox(height: 16),
-            _calcButton(_calcButtonText(), onPressed: _runCurrentCalculation),
-          ],
-        ),
-      ),
+    return Column(
+      children: [
+        _modeSelector(),
+        const SizedBox(height: 12),
+        _modeDescriptionCard(),
+        const SizedBox(height: 12),
+        ..._calculationFields(),
+        const SizedBox(height: 14),
+        _calcButton(_calcButtonText(), onPressed: _runCurrentCalculation),
+        if (_hasPendingResult) ...[
+          const SizedBox(height: 16),
+          _inlineCalculationResult(),
+        ],
+      ],
     );
   }
 
@@ -2572,35 +3048,266 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   List<Widget> _calculationFields() {
     if (_isAverageMode) {
       return [
-        _numberField(highFuelCtrl, '고급유 주유량 (L)', hint: '예: 20'),
-        const SizedBox(height: 14),
-        _numberField(regFuelCtrl, '일반유 주유량 (L)', hint: '예: 25'),
+        _calculationGroupCard(
+          title: '고급유',
+          icon: Icons.local_gas_station_rounded,
+          subtitle: '고급유 주유량과 옥탄가를 입력하세요.',
+          children: [
+            _calculationInputRow(
+              highFuelCtrl,
+              '고급유 주유량 (L)',
+              unit: 'L',
+              hint: '20',
+            ),
+            const SizedBox(height: 10),
+            _calculationInputRow(
+              highOctaneCtrl,
+              '고급유 옥탄가 (RON)',
+              unit: 'RON',
+              hint: '100',
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _calculationGroupCard(
+          title: '일반유',
+          icon: Icons.local_gas_station_outlined,
+          subtitle: '일반유 주유량과 옥탄가를 입력하세요.',
+          children: [
+            _calculationInputRow(
+              regFuelCtrl,
+              '일반유 주유량 (L)',
+              unit: 'L',
+              hint: '10',
+            ),
+            const SizedBox(height: 10),
+            _calculationInputRow(
+              regularOctaneCtrl,
+              '일반유 옥탄가 (RON)',
+              unit: 'RON',
+              hint: '91',
+            ),
+          ],
+        ),
       ];
     }
 
     if (_isMixedMode) {
       return [
-        _numberField(beforeLiterCtrl, '현재 남은 연료량 (L)', hint: '예: 10'),
-        const SizedBox(height: 14),
-        _numberField(beforeOctaneCtrl, '현재 추정 옥탄가', hint: '예: 92'),
-        const SizedBox(height: 14),
-        _numberField(addLiterCtrl, '이번에 넣을 주유량 (L)', hint: '예: 30'),
-        const SizedBox(height: 14),
-        _numberField(addOctaneCtrl, '이번에 넣을 연료 옥탄가', hint: '예: 98'),
-        const SizedBox(height: 14),
-        _numberField(mixTankCtrl, '탱크 용량 (L)', hint: '차량 설정값 사용 가능'),
+        _calculationGroupCard(
+          title: '현재 탱크 상태',
+          icon: Icons.propane_tank_outlined,
+          subtitle: '현재 탱크에 남은 연료 정보를 입력하세요.',
+          children: [
+            _calculationInputRow(
+              beforeLiterCtrl,
+              '현재 남은 연료량 (L)',
+              unit: 'L',
+              hint: '15',
+            ),
+            const SizedBox(height: 10),
+            _calculationInputRow(
+              beforeOctaneCtrl,
+              '현재 추정 옥탄가 (RON)',
+              unit: 'RON',
+              hint: '95.3',
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _calculationGroupCard(
+          title: '이번 주유',
+          icon: Icons.local_gas_station_rounded,
+          subtitle: '이번에 주입할 연료 정보를 입력하세요.',
+          children: [
+            _calculationInputRow(
+              addLiterCtrl,
+              '이번에 넣을 주유량 (L)',
+              unit: 'L',
+              hint: '30',
+            ),
+            const SizedBox(height: 10),
+            _calculationInputRow(
+              addOctaneCtrl,
+              '이번에 넣을 연료 옥탄가 (RON)',
+              unit: 'RON',
+              hint: '100',
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _calculationGroupCard(
+          title: '탱크 용량',
+          icon: Icons.water_drop_outlined,
+          subtitle: '입력하면 탱크 용량 초과 여부를 함께 확인합니다.',
+          children: [
+            _calculationInputRow(
+              mixTankCtrl,
+              '탱크 용량 (선택)',
+              unit: 'L',
+              hint: '50',
+            ),
+          ],
+        ),
       ];
     }
 
     return [
-      _numberField(targetOctaneCtrl, '목표 옥탄가', hint: '예: 95'),
-      const SizedBox(height: 14),
-      _numberField(targetCurrentLiterCtrl, '현재 남은 연료량 (L)', hint: '예: 15'),
-      const SizedBox(height: 14),
-      _numberField(targetCurrentOctaneCtrl, '현재 추정 옥탄가', hint: '예: 92'),
-      const SizedBox(height: 14),
-      _numberField(targetFuelOctaneCtrl, '넣을 연료 옥탄가', hint: '예: 98'),
+      _calculationGroupCard(
+        title: '목표 옥탄가',
+        icon: Icons.flag_outlined,
+        subtitle: '달성하고 싶은 목표 옥탄가를 입력하세요.',
+        children: [
+          _calculationInputRow(
+            targetOctaneCtrl,
+            '목표 옥탄가 (RON)',
+            unit: 'RON',
+            hint: '98',
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _calculationGroupCard(
+        title: '현재 탱크 상태',
+        icon: Icons.propane_tank_outlined,
+        subtitle: '현재 탱크의 연료 정보를 입력하세요.',
+        children: [
+          _calculationInputRow(
+            targetCurrentLiterCtrl,
+            '현재 남은 연료량 (L)',
+            unit: 'L',
+            hint: '15',
+          ),
+          const SizedBox(height: 10),
+          _calculationInputRow(
+            targetCurrentOctaneCtrl,
+            '현재 연료 옥탄가 (RON)',
+            unit: 'RON',
+            hint: '95.3',
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _calculationGroupCard(
+        title: '주입할 연료',
+        icon: Icons.water_drop_rounded,
+        subtitle: '주입할 연료의 옥탄가를 입력하세요.',
+        children: [
+          _calculationInputRow(
+            targetFuelOctaneCtrl,
+            '주입할 연료 옥탄가 (RON)',
+            unit: 'RON',
+            hint: '100',
+          ),
+        ],
+      ),
     ];
+  }
+
+  Widget _calculationGroupCard({
+    required String title,
+    required IconData icon,
+    String? subtitle,
+    required List<Widget> children,
+  }) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D2033),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF1B3852)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: const Color(0xFF00E58A), size: 19),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Color(0xFFB8C4D1),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            color: Color(0xFF8296AA),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _calculationInputRow(
+    TextEditingController controller,
+    String label, {
+    required String unit,
+    required String hint,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 4,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFFD7E2EC),
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 5,
+          child: TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textInputAction: TextInputAction.next,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+            decoration: InputDecoration(
+              hintText: hint,
+              suffixText: unit,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   String _calcButtonText() {
@@ -2654,7 +3361,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           children: [
             _numberField(highFuelCtrl, '고급유 주유량 (L)', hint: '예: 20'),
             const SizedBox(height: 14),
+            _numberField(highOctaneCtrl, '고급유 옥탄가 (RON)', hint: '예: 97'),
+            const SizedBox(height: 14),
             _numberField(regFuelCtrl, '일반유 주유량 (L)', hint: '예: 25'),
+            const SizedBox(height: 14),
+            _numberField(regularOctaneCtrl, '일반유 옥탄가 (RON)', hint: '예: 92'),
           ],
         ),
         const SizedBox(height: 18),
@@ -2941,22 +3652,24 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           Wrap(
             spacing: 7,
             runSpacing: 7,
-            children: stations
-                .map(
-                  (name) => ActionChip(
-                    label: Text(name),
-                    avatar: const Icon(Icons.history_rounded, size: 16),
-                    onPressed: () => setState(() => stationCtrl.text = name),
-                    backgroundColor: const Color(0xFF102B3A),
-                    labelStyle: const TextStyle(
-                      color: Color(0xFFB8C4D1),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    side: const BorderSide(color: Color(0xFF1B3852)),
-                  ),
-                )
-                .toList(),
+            children:
+                stations
+                    .map(
+                      (name) => ActionChip(
+                        label: Text(name),
+                        avatar: const Icon(Icons.history_rounded, size: 16),
+                        onPressed:
+                            () => setState(() => stationCtrl.text = name),
+                        backgroundColor: const Color(0xFF102B3A),
+                        labelStyle: const TextStyle(
+                          color: Color(0xFFB8C4D1),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        side: const BorderSide(color: Color(0xFF1B3852)),
+                      ),
+                    )
+                    .toList(),
           ),
         ],
         const SizedBox(height: 10),
@@ -3000,8 +3713,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   List<String> _recentStationNames() {
     final names = <String>[];
     final seen = <String>{};
-    final logs = Hive.box<OctaneLog>('octane_logs').values.toList()
-      ..sort((a, b) => b.time.compareTo(a.time));
+    final logs =
+        Hive.box<OctaneLog>('octane_logs').values.toList()
+          ..sort((a, b) => b.time.compareTo(a.time));
     for (final log in logs) {
       final name = log.stationName?.trim();
       if (name == null || name.isEmpty || !seen.add(name.toLowerCase())) {
@@ -3194,7 +3908,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               const SizedBox(height: 14),
               const Divider(height: 1, color: Color(0xFF1D2B38)),
               const SizedBox(height: 12),
-              _targetSummaryRow('주유 후 예상 총 연료량', _formatLiter(_targetTotalLiter!)),
+              _targetSummaryRow(
+                '주유 후 예상 총 연료량',
+                _formatLiter(_targetTotalLiter!),
+              ),
               const SizedBox(height: 8),
               _targetSummaryRow(
                 '최종 예상 옥탄가',
@@ -3727,6 +4444,40 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: _listPadding(context),
       children: [
+        Row(
+          children: [
+            IconButton(
+              tooltip: '뒤로가기',
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                } else {
+                  _goToMainTab(0);
+                }
+              },
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              '옥탄가 계산',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const Spacer(),
+            IconButton(
+              tooltip: '계산 도움말',
+              onPressed: _showInputHelp,
+              icon: const Icon(
+                Icons.help_outline_rounded,
+                color: Color(0xFFB8C4D1),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         _darkDashboardCard(
           padding: const EdgeInsets.all(12),
           child: const Row(
@@ -4173,6 +4924,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     for (final controller in [
       highFuelCtrl,
       regFuelCtrl,
+      highOctaneCtrl,
+      regularOctaneCtrl,
       beforeLiterCtrl,
       beforeOctaneCtrl,
       addLiterCtrl,
@@ -5687,6 +6440,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     TextEditingController ctrl,
     String label, {
     String? hint,
+    String? unit,
   }) {
     return TextField(
       controller: ctrl,
@@ -5694,7 +6448,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       textInputAction: TextInputAction.done,
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-      decoration: InputDecoration(labelText: label, hintText: hint),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        suffixText: unit,
+      ),
     );
   }
 
